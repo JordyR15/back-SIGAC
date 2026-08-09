@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,7 +6,6 @@ using back.Data;
 using back.DTOs;
 using back.Entities;
 using back.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,9 +25,9 @@ namespace back.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult<UserDto>> Register(LoginDto loginDto)
+        public async Task<ActionResult<UserDto>> Register(RegisterDto registerDto)
         {
-            if (await UserExists(loginDto.Username))
+            if (await UserExists(registerDto.Username))
             {
                 return BadRequest("Username is already taken");
             }
@@ -38,25 +36,40 @@ namespace back.Controllers
 
             var user = new User
             {
-                Username = loginDto.Username.ToLower(),
-                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDto.Password)),
+                Username = registerDto.Username.ToLower(),
+                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerDto.Password)),
                 PasswordSalt = hmac.Key
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            var persona = new Persona
+            {
+                Nombre = registerDto.Nombre,
+                Apellido = registerDto.Apellido,
+                Correo = registerDto.Correo,
+                Rol = registerDto.Rol,
+                UserId = user.Id
+            };
+
+            _context.Personas.Add(persona);
+            await _context.SaveChangesAsync();
+
             return new UserDto
             {
                 Username = user.Username,
-                Token = _tokenService.CreateToken(user)
+                Token = _tokenService.CreateToken(user),
+                Rol = persona.Rol
             };
         }
 
         [HttpPost("login")]
         public async Task<ActionResult<UserDto>> Login(LoginDto loginDto)
         {
-            var user = await _context.Users.SingleOrDefaultAsync(x => x.Username == loginDto.Username);
+            var user = await _context.Users
+                .Include(u => u.Persona)
+                .SingleOrDefaultAsync(x => x.Username == loginDto.Username);
 
             if (user == null)
             {
@@ -64,7 +77,6 @@ namespace back.Controllers
             }
 
             using var hmac = new HMACSHA512(user.PasswordSalt);
-
             var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDto.Password));
 
             for (int i = 0; i < computedHash.Length; i++)
@@ -78,18 +90,9 @@ namespace back.Controllers
             return new UserDto
             {
                 Username = user.Username,
-                Token = _tokenService.CreateToken(user)
+                Token = _tokenService.CreateToken(user),
+                Rol = user.Persona?.Rol
             };
-        }
-
-        [Authorize]
-        [HttpPost("users")]
-        public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
-        {
-            var users = await _context.Users
-                .Select(u => new UserDto { Username = u.Username })
-                .ToListAsync();
-            return users;
         }
 
         private async Task<bool> UserExists(string username)

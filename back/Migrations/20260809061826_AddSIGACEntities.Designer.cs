@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using back.Data;
@@ -11,9 +12,11 @@ using back.Data;
 namespace back.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260809061826_AddSIGACEntities")]
+    partial class AddSIGACEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -246,41 +249,6 @@ namespace back.Migrations
                     b.ToTable("Inscripciones");
                 });
 
-            modelBuilder.Entity("back.Entities.Persona", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Apellido")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Correo")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Nombre")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Rol")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("Personas");
-                });
-
             modelBuilder.Entity("back.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -320,13 +288,13 @@ namespace back.Migrations
             modelBuilder.Entity("back.Entities.Ayudantia", b =>
                 {
                     b.HasOne("back.Entities.Catedra", "Catedra")
-                        .WithMany("Ayudantias")
+                        .WithMany()
                         .HasForeignKey("CatedraId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("back.Entities.User", "Estudiante")
-                        .WithMany("AyudantiasEstudiante")
+                        .WithMany()
                         .HasForeignKey("EstudianteId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -350,7 +318,7 @@ namespace back.Migrations
             modelBuilder.Entity("back.Entities.Catedra", b =>
                 {
                     b.HasOne("back.Entities.User", "Docente")
-                        .WithMany("CatedrasDocente")
+                        .WithMany()
                         .HasForeignKey("DocenteId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -408,7 +376,7 @@ namespace back.Migrations
                         .IsRequired();
 
                     b.HasOne("back.Entities.User", "Estudiante")
-                        .WithMany("Inscripciones")
+                        .WithMany()
                         .HasForeignKey("EstudianteId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -416,17 +384,6 @@ namespace back.Migrations
                     b.Navigation("Catedra");
 
                     b.Navigation("Estudiante");
-                });
-
-            modelBuilder.Entity("back.Entities.Persona", b =>
-                {
-                    b.HasOne("back.Entities.User", "User")
-                        .WithOne("Persona")
-                        .HasForeignKey("back.Entities.Persona", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("back.Entities.Ayudantia", b =>
@@ -438,23 +395,9 @@ namespace back.Migrations
 
             modelBuilder.Entity("back.Entities.Catedra", b =>
                 {
-                    b.Navigation("Ayudantias");
-
                     b.Navigation("Evaluaciones");
 
                     b.Navigation("Inscripciones");
-                });
-
-            modelBuilder.Entity("back.Entities.User", b =>
-                {
-                    b.Navigation("AyudantiasEstudiante");
-
-                    b.Navigation("CatedrasDocente");
-
-                    b.Navigation("Inscripciones");
-
-                    b.Navigation("Persona")
-                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

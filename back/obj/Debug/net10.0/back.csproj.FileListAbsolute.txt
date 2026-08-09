@@ -148,4 +148,3 @@ C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\D
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\tr\Microsoft.CodeAnalysis.Workspaces.resources.dll
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\zh-Hans\Microsoft.CodeAnalysis.Workspaces.resources.dll
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\zh-Hant\Microsoft.CodeAnalysis.Workspaces.resources.dll
-C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt
