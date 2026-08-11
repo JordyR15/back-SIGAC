@@ -6,6 +6,7 @@ namespace back.Entities
     {
         public int Id { get; set; }
         public string Nombre { get; set; }
+        public string Semestre { get; set; } // Añadido: e.g., "2023-1", "2023-2"
         public int DocenteId { get; set; }
         public User Docente { get; set; }
         public ICollection<Inscripcion> Inscripciones { get; set; } = new List<Inscripcion>();

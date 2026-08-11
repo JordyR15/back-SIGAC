@@ -19,6 +19,12 @@ namespace back.Data
         public DbSet<ActividadAyudantia> ActividadesAyudantia { get; set; }
         public DbSet<Bitacora> Bitacoras { get; set; }
         public DbSet<CronogramaActividad> Cronogramas { get; set; }
+        public DbSet<Recurso> Recursos { get; set; }
+        public DbSet<Actividad> Actividades { get; set; }
+        public DbSet<ClaseSesion> ClasesSesiones { get; set; }
+        public DbSet<Asistencia> Asistencias { get; set; }
+        public DbSet<Clase> Clases { get; set; }
+        public DbSet<RecursoVistoPorEstudiante> RecursosVistosPorEstudiante { get; set; } // Añadido
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -54,13 +60,63 @@ namespace back.Data
             // Relaciones de Ayudantia
             modelBuilder.Entity<Ayudantia>()
                 .HasOne(a => a.Catedra)
-                .WithMany(c => c.Ayudantias) // Corregido
+                .WithMany(c => c.Ayudantias)
                 .HasForeignKey(a => a.CatedraId);
 
             modelBuilder.Entity<Ayudantia>()
                 .HasOne(a => a.Estudiante)
                 .WithMany(u => u.AyudantiasEstudiante)
                 .HasForeignKey(a => a.EstudianteId);
+
+            // Relaciones para ClaseSesion
+            modelBuilder.Entity<ClaseSesion>()
+                .HasOne(cs => cs.Materia)
+                .WithMany(m => m.ClasesSesiones)
+                .HasForeignKey(cs => cs.MateriaId);
+
+            modelBuilder.Entity<ClaseSesion>()
+                .HasOne(cs => cs.Docente)
+                .WithMany(u => u.ClasesSesionesDocente)
+                .HasForeignKey(cs => cs.DocenteId);
+
+            // Relaciones para Asistencia
+            modelBuilder.Entity<Asistencia>()
+                .HasOne(a => a.ClaseSesion)
+                .WithMany(cs => cs.Asistencias)
+                .HasForeignKey(a => a.ClaseSesionId);
+
+            modelBuilder.Entity<Asistencia>()
+                .HasOne(a => a.Estudiante)
+                .WithMany(u => u.AsistenciasEstudiante)
+                .HasForeignKey(a => a.EstudianteId);
+
+            // Relaciones para Clase
+            modelBuilder.Entity<Clase>()
+                .HasOne(c => c.Materia)
+                .WithMany(m => m.Clases)
+                .HasForeignKey(c => c.MateriaId);
+
+            modelBuilder.Entity<Clase>()
+                .HasOne(c => c.Docente)
+                .WithMany(u => u.ClasesDocente)
+                .HasForeignKey(c => c.DocenteId);
+
+            // Relación muchos a muchos entre Clase y User (Estudiantes)
+            modelBuilder.Entity<Clase>()
+                .HasMany(c => c.Estudiantes)
+                .WithMany(u => u.ClasesEstudiante)
+                .UsingEntity(j => j.ToTable("ClaseEstudiante")); // Tabla de unión
+
+            // Relaciones para RecursoVistoPorEstudiante
+            modelBuilder.Entity<RecursoVistoPorEstudiante>()
+                .HasOne(rv => rv.Recurso)
+                .WithMany() // No necesitamos una colección en Recurso para esto
+                .HasForeignKey(rv => rv.RecursoId);
+
+            modelBuilder.Entity<RecursoVistoPorEstudiante>()
+                .HasOne(rv => rv.Estudiante)
+                .WithMany(u => u.RecursosVistos) // Asumiendo que User tiene esta colección
+                .HasForeignKey(rv => rv.EstudianteId);
         }
     }
 }
