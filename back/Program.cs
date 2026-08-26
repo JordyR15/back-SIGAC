@@ -48,8 +48,19 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddCors(); // Add CORS services
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+var defaultConn = builder.Configuration.GetConnectionString("DefaultConnection");
+var useInMemory = (builder.Configuration["USE_INMEMORY"] ?? Environment.GetEnvironmentVariable("USE_INMEMORY")) == "true";
+if (string.IsNullOrEmpty(defaultConn) || useInMemory)
+{
+    // Use in-memory DB for local testing if no connection string is configured or USE_INMEMORY=true
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseInMemoryDatabase("SIGAC_InMemory"));
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(defaultConn));
+}
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 
@@ -83,7 +94,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Use CORS middleware
-app.UseCors(x => x.AllowAnyHeader().AllowAnyMethod().WithOrigins("http://localhost:3000", "https://localhost:3001"));
+app.UseCors(x => x.AllowAnyHeader().AllowAnyMethod().WithOrigins("http://localhost:3000", "https://localhost:3001", "http://localhost:52700"));
 
 app.UseAuthentication(); // This must come before UseAuthorization
 app.UseAuthorization();

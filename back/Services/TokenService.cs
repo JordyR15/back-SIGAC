@@ -21,8 +21,14 @@ namespace back.Services
         {
             var claims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.NameId, user.Username)
+                new Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(System.Security.Claims.ClaimTypes.Name, user.Username)
             };
+
+            if (user.Persona != null && !string.IsNullOrEmpty(user.Persona.Rol))
+            {
+                claims.Add(new Claim(System.Security.Claims.ClaimTypes.Role, user.Persona.Rol));
+            }
 
             var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
 

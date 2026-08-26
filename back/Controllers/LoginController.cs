@@ -56,11 +56,18 @@ namespace back.Controllers
             _context.Personas.Add(persona);
             await _context.SaveChangesAsync();
 
+            // Attach persona to user so the token includes role and the correct NameIdentifier claim (user id)
+            user.Persona = persona;
+
             return new UserDto
             {
+                Id = user.Id,
                 Username = user.Username,
                 Token = _tokenService.CreateToken(user),
-                Rol = persona.Rol
+                Rol = persona.Rol,
+                Nombre = persona.Nombre,
+                Apellido = persona.Apellido,
+                Correo = persona.Correo
             };
         }
 
@@ -89,9 +96,13 @@ namespace back.Controllers
 
             return new UserDto
             {
+                Id = user.Id,
                 Username = user.Username,
                 Token = _tokenService.CreateToken(user),
-                Rol = user.Persona?.Rol
+                Rol = user.Persona?.Rol,
+                Nombre = user.Persona?.Nombre,
+                Apellido = user.Persona?.Apellido,
+                Correo = user.Persona?.Correo
             };
         }
 
