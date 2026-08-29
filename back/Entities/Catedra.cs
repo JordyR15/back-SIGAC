@@ -12,6 +12,9 @@ namespace back.Entities
         public ICollection<Inscripcion> Inscripciones { get; set; } = new List<Inscripcion>();
         public ICollection<Evaluacion> Evaluaciones { get; set; } = new List<Evaluacion>();
 
+        // Nota mínima requerida para postulaciones/aceptación. Null = sin restricción
+        public double? MinimoNota { get; set; }
+
         // Propiedad añadida para la relación con Ayudantia
         public ICollection<Ayudantia> Ayudantias { get; set; } = new List<Ayudantia>();
     }

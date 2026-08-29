@@ -13,5 +13,8 @@ namespace back.Entities
 
         public ICollection<ActividadAyudantia> Planificacion { get; set; } = new List<ActividadAyudantia>();
         public ICollection<Bitacora> Bitacoras { get; set; } = new List<Bitacora>();
+
+        // Presentaciones públicas/privadas que han ocurrido para esta postulacion/ayudantía
+        public ICollection<Presentacion> Presentaciones { get; set; } = new List<Presentacion>();
     }
 }

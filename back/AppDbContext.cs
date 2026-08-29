@@ -26,6 +26,14 @@ namespace back.Data
         public DbSet<Clase> Clases { get; set; }
         public DbSet<RecursoVistoPorEstudiante> RecursosVistosPorEstudiante { get; set; } // Añadido
 
+        // Presentaciones y evaluaciones realizadas por jurados en las postulaciones
+        public DbSet<Presentacion> Presentaciones { get; set; }
+        public DbSet<PresentacionEvaluacion> PresentacionEvaluaciones { get; set; }
+
+        // Import jobs (bulk upload audits/results)
+        public DbSet<ImportJob> ImportJobs { get; set; }
+        public DbSet<ImportJobEntry> ImportJobEntries { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -117,6 +125,47 @@ namespace back.Data
                 .HasOne(rv => rv.Estudiante)
                 .WithMany(u => u.RecursosVistos) // Asumiendo que User tiene esta colección
                 .HasForeignKey(rv => rv.EstudianteId);
+
+            // Relaciones para Presentacion y PresentacionEvaluacion
+            modelBuilder.Entity<Presentacion>()
+                .HasOne(p => p.Ayudantia)
+                .WithMany(a => a.Presentaciones)
+                .HasForeignKey(p => p.AyudantiaId);
+
+            modelBuilder.Entity<PresentacionEvaluacion>()
+                .HasOne(pe => pe.Presentacion)
+                .WithMany(p => p.Evaluaciones)
+                .HasForeignKey(pe => pe.PresentacionId);
+
+            modelBuilder.Entity<PresentacionEvaluacion>()
+                .HasOne(pe => pe.Jurado)
+                .WithMany() // No necesitamos colección inversa por ahora
+                .HasForeignKey(pe => pe.JuradoId);
+
+            modelBuilder.Entity<Presentacion>()
+                .HasOne(p => p.Decano)
+                .WithMany()
+                .HasForeignKey(p => p.DecanoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Presentacion>()
+                .HasOne(p => p.CoordinadorCarrera)
+                .WithMany()
+                .HasForeignKey(p => p.CoordinadorCarreraId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // ImportJob relations
+            modelBuilder.Entity<ImportJob>()
+                .HasOne(j => j.CreatedBy)
+                .WithMany() // no collection on User for jobs
+                .HasForeignKey(j => j.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ImportJobEntry>()
+                .HasOne(e => e.ImportJob)
+                .WithMany(j => j.Entries)
+                .HasForeignKey(e => e.ImportJobId);
+
         }
     }
 }

@@ -149,3 +149,10 @@ C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\D
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\back.genruntimeconfig.cache
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\ref\back.dll
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.InMemory.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\ClosedXML.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\DocumentFormat.OpenXml.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\ExcelNumberFormat.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\Irony.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\SixLabors.Fonts.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\System.IO.Packaging.dll
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\bin\Debug\net10.0\XLParser.dll

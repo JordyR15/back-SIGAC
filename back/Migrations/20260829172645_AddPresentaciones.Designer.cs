@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using back.Data;
@@ -11,9 +12,11 @@ using back.Data;
 namespace back.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829172645_AddPresentaciones")]
+    partial class AddPresentaciones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -359,86 +362,6 @@ namespace back.Migrations
                     b.HasIndex("CatedraId");
 
                     b.ToTable("Evaluaciones");
-                });
-
-            modelBuilder.Entity("back.Entities.ImportJob", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CreatedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CreatedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ErrorCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ResultFileName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.ToTable("ImportJobs");
-                });
-
-            modelBuilder.Entity("back.Entities.ImportJobEntry", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Apellidos")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Cedula")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Correo")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ErrorMessage")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("ImportJobId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Nombres")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("Success")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ImportJobId");
-
-                    b.ToTable("ImportJobEntries");
                 });
 
             modelBuilder.Entity("back.Entities.IndicadorCualitativo", b =>
@@ -879,28 +802,6 @@ namespace back.Migrations
                     b.Navigation("Catedra");
                 });
 
-            modelBuilder.Entity("back.Entities.ImportJob", b =>
-                {
-                    b.HasOne("back.Entities.User", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("CreatedBy");
-                });
-
-            modelBuilder.Entity("back.Entities.ImportJobEntry", b =>
-                {
-                    b.HasOne("back.Entities.ImportJob", "ImportJob")
-                        .WithMany("Entries")
-                        .HasForeignKey("ImportJobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ImportJob");
-                });
-
             modelBuilder.Entity("back.Entities.IndicadorCualitativo", b =>
                 {
                     b.HasOne("back.Entities.Catedra", "Catedra")
@@ -1056,11 +957,6 @@ namespace back.Migrations
             modelBuilder.Entity("back.Entities.ClaseSesion", b =>
                 {
                     b.Navigation("Asistencias");
-                });
-
-            modelBuilder.Entity("back.Entities.ImportJob", b =>
-                {
-                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("back.Entities.Materia", b =>

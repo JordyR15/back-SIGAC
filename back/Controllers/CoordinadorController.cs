@@ -44,13 +44,45 @@ namespace back.Controllers
         [HttpPost("ayudantias/asignar")]
         public async Task<IActionResult> AsignarAyudante([FromBody] AsignacionAyudantiaDto asignacionDto)
         {
-            var ayudantia = await _context.Ayudantias.FindAsync(asignacionDto.AyudantiaId);
+            var ayudantia = await _context.Ayudantias
+                .Include(a => a.Catedra)
+                .FirstOrDefaultAsync(a => a.Id == asignacionDto.AyudantiaId);
             if (ayudantia == null) return NotFound("Solicitud de ayudantía no encontrada.");
+
+            // Validar nota mínima si está establecida en la cátedra
+            var catedra = ayudantia.Catedra;
+            var inscripcion = await _context.Inscripciones
+                .FirstOrDefaultAsync(i => i.EstudianteId == ayudantia.EstudianteId && i.CatedraId == ayudantia.CatedraId);
+
+            if (catedra != null && catedra.MinimoNota.HasValue)
+            {
+                if (inscripcion == null)
+                {
+                    return BadRequest(new { message = "No se puede asignar: el estudiante no está inscrito en la cátedra." });
+                }
+
+                if (inscripcion.PromedioActual < catedra.MinimoNota.Value)
+                {
+                    return BadRequest(new { message = "No se puede asignar: el promedio del estudiante es inferior a la nota mínima establecida." });
+                }
+            }
 
             ayudantia.Estado = "Activa";
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Ayudante asignado exitosamente." });
+        }
+
+        [HttpPut("catedras/{catedraId}/minimo-nota")]
+        public async Task<IActionResult> SetMinimoNota(int catedraId, [FromBody] SetMinimoNotaDto dto)
+        {
+            var catedra = await _context.Catedras.FindAsync(catedraId);
+            if (catedra == null) return NotFound("Cátedra no encontrada.");
+
+            catedra.MinimoNota = dto.MinimoNota;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"Nota mínima para la cátedra {catedraId} actualizada a {dto.MinimoNota}." });
         }
 
         [HttpGet("ayudantias/seguimiento")]

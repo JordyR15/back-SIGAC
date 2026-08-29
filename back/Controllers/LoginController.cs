@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -30,6 +31,37 @@ namespace back.Controllers
             if (await UserExists(registerDto.Username))
             {
                 return BadRequest("Username is already taken");
+            }
+
+            // If there are no users yet, allow creating the first Administrador
+            var anyUsers = await _context.Users.AnyAsync();
+            if (!anyUsers)
+            {
+                if (!string.Equals(registerDto.Rol, "Administrador", System.StringComparison.OrdinalIgnoreCase))
+                    return BadRequest("El primer usuario debe ser Administrador.");
+            }
+            else
+            {
+                // Require authenticated caller for subsequent creations
+                var callerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(callerId)) return Unauthorized("Sólo usuarios autenticados pueden crear cuentas.");
+
+                var callerRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+
+                // Define allowed target roles per caller role
+                string[] allowedTargets = callerRole switch
+                {
+                    "Administrador" => new[] { "Decano", "Coordinador", "Docente", "Estudiante" },
+                    "Decano" => new[] { "Coordinador", "Docente", "Estudiante" },
+                    "Coordinador" => new[] { "Docente", "Estudiante" },
+                    "Docente" => new[] { "Estudiante" },
+                    _ => new string[0]
+                };
+
+                if (!allowedTargets.Any(r => string.Equals(r, registerDto.Rol, System.StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Forbid($"El rol '{callerRole}' no está autorizado para crear cuentas con rol '{registerDto.Rol}'.");
+                }
             }
 
             using var hmac = new HMACSHA512();
