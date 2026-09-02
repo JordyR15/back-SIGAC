@@ -106,9 +106,17 @@ namespace back.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<UserDto>> Login(LoginDto loginDto)
         {
+            var username = loginDto.Username?.Trim();
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return Unauthorized("Username requerido");
+            }
+
+            var normalizedUsername = username.ToLowerInvariant();
+
             var user = await _context.Users
                 .Include(u => u.Persona)
-                .SingleOrDefaultAsync(x => x.Username == loginDto.Username);
+                .SingleOrDefaultAsync(x => x.Username == normalizedUsername);
 
             if (user == null)
             {
