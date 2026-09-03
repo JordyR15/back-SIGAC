@@ -31,11 +31,23 @@ namespace back.Controllers
             var ayudantia = await _context.Ayudantias.FindAsync(dto.AyudantiaId);
             if (ayudantia == null) return NotFound("Ayudantía/postulación no encontrada.");
 
+            var juradoIds = dto.JuradoIds?.Any() == true
+                ? dto.JuradoIds.Distinct().ToList()
+                : (dto.ProfesoresAsignados ?? string.Empty)
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(int.Parse)
+                    .Distinct()
+                    .ToList();
+
+            var jurados = await _context.Users
+                .Where(u => juradoIds.Contains(u.Id))
+                .ToListAsync();
+
             var presentacion = new Presentacion
             {
                 AyudantiaId = dto.AyudantiaId,
                 Fecha = dto.Fecha,
-                ProfesoresAsignados = dto.ProfesoresAsignados,
+                Jurados = jurados,
                 DecanoId = dto.DecanoId,
                 CoordinadorCarreraId = dto.CoordinadorCarreraId
             };

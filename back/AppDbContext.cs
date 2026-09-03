@@ -33,6 +33,7 @@ namespace back.Data
         // Import jobs (bulk upload audits/results)
         public DbSet<ImportJob> ImportJobs { get; set; }
         public DbSet<ImportJobEntry> ImportJobEntries { get; set; }
+        public DbSet<EstudianteActividadRealizada> EstudianteActividadesRealizadas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -132,6 +133,11 @@ namespace back.Data
                 .WithMany(a => a.Presentaciones)
                 .HasForeignKey(p => p.AyudantiaId);
 
+            modelBuilder.Entity<Presentacion>()
+                .HasMany(p => p.Jurados)
+                .WithMany(u => u.PresentacionesJurado)
+                .UsingEntity(j => j.ToTable("PresentacionJurado"));
+
             modelBuilder.Entity<PresentacionEvaluacion>()
                 .HasOne(pe => pe.Presentacion)
                 .WithMany(p => p.Evaluaciones)
@@ -165,6 +171,21 @@ namespace back.Data
                 .HasOne(e => e.ImportJob)
                 .WithMany(j => j.Entries)
                 .HasForeignKey(e => e.ImportJobId);
+
+            modelBuilder.Entity<EstudianteActividadRealizada>()
+                .HasKey(e => e.Id);
+
+            modelBuilder.Entity<EstudianteActividadRealizada>()
+                .HasOne(e => e.Estudiante)
+                .WithMany()
+                .HasForeignKey(e => e.EstudianteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<EstudianteActividadRealizada>()
+                .HasOne(e => e.Actividad)
+                .WithMany()
+                .HasForeignKey(e => e.ActividadId)
+                .OnDelete(DeleteBehavior.Cascade);
 
         }
     }

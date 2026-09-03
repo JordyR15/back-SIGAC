@@ -2,10 +2,12 @@ using back.Data;
 using back.DTOs;
 using back.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
-using System.Collections.Generic; // Añadido
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -132,7 +134,7 @@ namespace back.Controllers
             var historial = await _context.Ayudantias
                 .Where(a => a.EstudianteId == EstudianteId.Value)
                 .Include(a => a.Catedra)
-                    .ThenInclude(c => c.Docente) // Para obtener el nombre del docente
+                    .ThenInclude(c => c.Docente)
                 .Select(a => new HistorialAyudantiaDto
                 {
                     AyudantiaId = a.Id,
@@ -140,7 +142,7 @@ namespace back.Controllers
                     CatedraId = a.CatedraId,
                     NombreCatedra = a.Catedra.Nombre,
                     SemestreCatedra = a.Catedra.Semestre,
-                    DocenteCatedra = a.Catedra.Docente.Persona.Nombre + " " + a.Catedra.Docente.Persona.Apellido // Corregido: Nombres -> Nombre, Apellidos -> Apellido
+                    DocenteCatedra = a.Catedra.Docente.Persona.Nombre + " " + a.Catedra.Docente.Persona.Apellido
                 })
                 .ToListAsync();
 
@@ -150,6 +152,124 @@ namespace back.Controllers
             }
 
             return Ok(historial);
+        }
+
+        [HttpGet("{id}/validacion-malla")]
+        public async Task<IActionResult> ValidacionMalla(int id, [FromQuery] int? catedraId = null)
+        {
+            var inscripciones = await _context.Inscripciones
+                .Where(i => i.EstudianteId == id)
+                .ToListAsync();
+
+            if (!inscripciones.Any())
+            {
+                return NotFound(new { message = "Estudiante sin inscripciones registradas." });
+            }
+
+            var totalCursos = await _context.Catedras.CountAsync();
+            var cursosAprobados = inscripciones.Count(i => i.PromedioActual >= 60m);
+            var porcentajeAvance = totalCursos > 0 ? (double)cursosAprobados / totalCursos * 100d : 0d;
+            var promedioGeneral = inscripciones.Average(i => i.PromedioActual);
+            var promedioCurso = catedraId.HasValue
+                ? inscripciones.Where(i => i.CatedraId == catedraId.Value).Select(i => i.PromedioActual).DefaultIfEmpty(0m).Average()
+                : (decimal?)null;
+
+            return Ok(new
+            {
+                EstudianteId = id,
+                PorcentajeAvanceMalla = Math.Round(porcentajeAvance, 2),
+                CursosAprobados = cursosAprobados,
+                TotalCursos = totalCursos,
+                PromedioGeneral = Math.Round(promedioGeneral, 2),
+                PromedioCurso = promedioCurso.HasValue ? Math.Round(promedioCurso.Value, 2) : null,
+                CursoId = catedraId,
+                CumpleMalla = porcentajeAvance >= 50,
+                CumplePromedioGeneral = promedioGeneral >= 60m,
+                CumplePromedioCurso = !catedraId.HasValue || (promedioCurso.HasValue && promedioCurso.Value >= 60m)
+            });
+        }
+
+        [HttpPost("actividades/{actividadId}/entregar")]
+        public async Task<IActionResult> EntregarActividad(int actividadId, [FromForm] IFormFile archivo)
+        {
+            if (EstudianteId == null) return Unauthorized();
+            if (archivo == null || archivo.Length == 0) return BadRequest("Debe adjuntar un archivo.");
+
+            var actividad = await _context.Actividades.FindAsync(actividadId);
+            if (actividad == null) return NotFound("Actividad no encontrada.");
+
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "entregas", $"actividad-{actividadId}");
+            Directory.CreateDirectory(uploadsFolder);
+
+            var safeName = Path.GetFileName(archivo.FileName);
+            var fileName = $"{Guid.NewGuid():N}_{safeName}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await archivo.CopyToAsync(stream);
+            }
+
+            var entrega = await _context.EstudianteActividadesRealizadas
+                .FirstOrDefaultAsync(e => e.EstudianteId == EstudianteId.Value && e.ActividadId == actividadId);
+
+            if (entrega == null)
+            {
+                entrega = new EstudianteActividadRealizada
+                {
+                    EstudianteId = EstudianteId.Value,
+                    ActividadId = actividadId,
+                    FechaRealizada = DateTime.UtcNow,
+                    Completada = true
+                };
+                _context.EstudianteActividadesRealizadas.Add(entrega);
+            }
+            else
+            {
+                entrega.FechaRealizada = DateTime.UtcNow;
+                entrega.Completada = true;
+            }
+
+            entrega.ArchivoUrl = $"/uploads/entregas/actividad-{actividadId}/{fileName}";
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Entrega registrada correctamente.", archivoUrl = entrega.ArchivoUrl });
+        }
+
+        [HttpPost("ayudantias/{ayudantiaId}/bitacora-multipart")]
+        public async Task<IActionResult> RegistrarBitacoraMultipart(int ayudantiaId, [FromForm] IFormFile archivo, [FromForm] string actividadesRealizadas)
+        {
+            var authResult = await CheckAyudantiaOwnershipAsync(ayudantiaId);
+            if (authResult != null) return authResult;
+
+            var evidenciaUrl = string.Empty;
+            if (archivo != null && archivo.Length > 0)
+            {
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "bitacoras", $"ayudantia-{ayudantiaId}");
+                Directory.CreateDirectory(uploadsFolder);
+                var fileName = $"{Guid.NewGuid():N}_{Path.GetFileName(archivo.FileName)}";
+                var filePath = Path.Combine(uploadsFolder, fileName);
+
+                await using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await archivo.CopyToAsync(stream);
+                }
+
+                evidenciaUrl = $"/uploads/bitacoras/ayudantia-{ayudantiaId}/{fileName}";
+            }
+
+            var bitacora = new Bitacora
+            {
+                AyudantiaId = ayudantiaId,
+                Fecha = DateTime.UtcNow,
+                ActividadesRealizadas = actividadesRealizadas,
+                EvidenciaUrl = evidenciaUrl
+            };
+
+            _context.Bitacoras.Add(bitacora);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Bitácora registrada con evidencia adjunta.", evidenciaUrl });
         }
 
         private async Task<IActionResult> CheckAyudantiaOwnershipAsync(int ayudantiaId)

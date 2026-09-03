@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace back.DTOs
 {
     public class UserDto
@@ -5,9 +7,10 @@ namespace back.DTOs
         public int Id { get; set; }
         public string Username { get; set; }
         public string Token { get; set; }
-        public string Rol { get; set; }
-        public string Nombre { get; set; }    // Agregar
-        public string Apellido { get; set; }  // Agregar
+        public List<string> Roles { get; set; } = new();
+        public string Rol { get; set; } = string.Empty; // Legacy compatibility
+        public string Nombre { get; set; }
+        public string Apellido { get; set; }
         public string Correo { get; set; }
     }
 }

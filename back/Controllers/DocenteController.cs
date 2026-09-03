@@ -115,5 +115,50 @@ namespace back.Controllers
 
             return Ok(monitoreoDto);
         }
+
+        [HttpGet("actividades/{actividadId}/entregas")]
+        public async Task<IActionResult> ObtenerEntregasPorActividad(int actividadId)
+        {
+            var actividad = await _context.Actividades.FindAsync(actividadId);
+            if (actividad == null) return NotFound("Actividad no encontrada.");
+
+            var entregas = await _context.EstudianteActividadesRealizadas
+                .Where(e => e.ActividadId == actividadId)
+                .Include(e => e.Estudiante)
+                    .ThenInclude(u => u.Persona)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.EstudianteId,
+                    NombreEstudiante = e.Estudiante.Persona.Nombre + " " + e.Estudiante.Persona.Apellido,
+                    e.ArchivoUrl,
+                    e.FechaRealizada,
+                    e.Completada,
+                    e.Calificacion,
+                    e.Retroalimentacion
+                })
+                .ToListAsync();
+
+            return Ok(entregas);
+        }
+
+        [HttpPost("actividades/calificar")]
+        public async Task<IActionResult> CalificarEntrega([FromBody] CalificarEntregaDto dto)
+        {
+            if (dto == null) return BadRequest("Datos necesarios.");
+
+            var entrega = await _context.EstudianteActividadesRealizadas
+                .FirstOrDefaultAsync(e => e.Id == dto.EntregaId);
+
+            if (entrega == null) return NotFound("Entrega no encontrada.");
+
+            entrega.Calificacion = dto.Calificacion;
+            entrega.Retroalimentacion = dto.Retroalimentacion ?? string.Empty;
+            entrega.Completada = true;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Calificación registrada correctamente.", entregaId = entrega.Id, calificacion = entrega.Calificacion });
+        }
     }
 }

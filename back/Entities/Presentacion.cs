@@ -10,8 +10,7 @@ namespace back.Entities
         public Ayudantia Ayudantia { get; set; }
         public DateTime Fecha { get; set; }
 
-        // Lista simple de profesores asignados (comas separadas). Si se prefiere, más tarde puede modelarse como relación.
-        public string ProfesoresAsignados { get; set; }
+        public ICollection<User> Jurados { get; set; } = new List<User>();
 
         public int? DecanoId { get; set; }
         public User Decano { get; set; }

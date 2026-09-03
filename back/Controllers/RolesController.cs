@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -30,20 +31,28 @@ namespace back.Controllers
         [HttpPut("{userId}")]
         public async Task<IActionResult> SetUserRole(int userId, [FromBody] SetUserRoleDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto?.Rol)) return BadRequest("Rol requerido.");
+            if (dto == null) return BadRequest("Datos requeridos.");
+
+            var requestedRoles = dto.Roles?.Any() == true ? dto.Roles : new List<string> { dto.Rol };
+            requestedRoles = requestedRoles
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!requestedRoles.Any()) return BadRequest("Rol requerido.");
 
             var callerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var callerRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+            var callerRoles = User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var callerRole = callerRoles.FirstOrDefault() ?? string.Empty;
             if (string.IsNullOrEmpty(callerId)) return Unauthorized();
 
-            // Si se intenta establecer Administrador, sólo Administrador puede hacerlo
-            if (string.Equals(dto.Rol, "Administrador", StringComparison.OrdinalIgnoreCase)
+            if (requestedRoles.Any(r => string.Equals(r, "Administrador", StringComparison.OrdinalIgnoreCase))
                 && !string.Equals(callerRole, "Administrador", StringComparison.OrdinalIgnoreCase))
             {
                 return Forbid("Solo Administrador puede asignar el rol Administrador.");
             }
 
-            // Definir roles permitidos según rol del llamador
             string[] allowedTargets = callerRole switch
             {
                 "Administrador" => new[] { "Administrador", "Decano", "Coordinador", "Docente", "Estudiante" },
@@ -53,9 +62,10 @@ namespace back.Controllers
                 _ => Array.Empty<string>()
             };
 
-            if (!allowedTargets.Any(r => string.Equals(r, dto.Rol, StringComparison.OrdinalIgnoreCase)))
+            var invalidRole = requestedRoles.FirstOrDefault(r => !allowedTargets.Any(a => string.Equals(a, r, StringComparison.OrdinalIgnoreCase)));
+            if (invalidRole != null)
             {
-                return Forbid($"El rol '{callerRole}' no está autorizado para asignar el rol '{dto.Rol}'.");
+                return Forbid($"El rol '{callerRole}' no está autorizado para asignar el rol '{invalidRole}'.");
             }
 
             var user = await _context.Users.Include(u => u.Persona).FirstOrDefaultAsync(u => u.Id == userId);
@@ -66,10 +76,10 @@ namespace back.Controllers
                 return BadRequest("El usuario no tiene una entidad Persona asociada; no se puede asignar rol.");
             }
 
-            user.Persona.Rol = dto.Rol;
+            user.Persona.SetRoles(requestedRoles);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = $"Rol del usuario {userId} actualizado a {dto.Rol}." });
+            return Ok(new { message = $"Roles del usuario {userId} actualizados: {string.Join(", ", requestedRoles)}." });
         }
     }
 }

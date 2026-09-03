@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -28,27 +30,36 @@ namespace back.Controllers
         [HttpPost("register")]
         public async Task<ActionResult<UserDto>> Register(RegisterDto registerDto)
         {
+            if (registerDto == null)
+            {
+                return BadRequest("Datos de registro requeridos.");
+            }
+
+            var requestedRoles = GetRequestedRoles(registerDto.Roles, registerDto.Rol);
+            if (!requestedRoles.Any())
+            {
+                return BadRequest("Debe indicar al menos un rol válido.");
+            }
+
             if (await UserExists(registerDto.Username))
             {
                 return BadRequest("Username is already taken");
             }
 
-            // If there are no users yet, allow creating the first Administrador
             var anyUsers = await _context.Users.AnyAsync();
             if (!anyUsers)
             {
-                if (!string.Equals(registerDto.Rol, "Administrador", System.StringComparison.OrdinalIgnoreCase))
+                if (!requestedRoles.Any(r => string.Equals(r, "Administrador", System.StringComparison.OrdinalIgnoreCase)))
                     return BadRequest("El primer usuario debe ser Administrador.");
             }
             else
             {
-                // Require authenticated caller for subsequent creations
                 var callerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(callerId)) return Unauthorized("Sólo usuarios autenticados pueden crear cuentas.");
 
-                var callerRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+                var callerRoles = GetRolesFromClaims(User.Claims);
+                var callerRole = callerRoles.FirstOrDefault() ?? string.Empty;
 
-                // Define allowed target roles per caller role
                 string[] allowedTargets = callerRole switch
                 {
                     "Administrador" => new[] { "Decano", "Coordinador", "Docente", "Estudiante" },
@@ -58,9 +69,10 @@ namespace back.Controllers
                     _ => new string[0]
                 };
 
-                if (!allowedTargets.Any(r => string.Equals(r, registerDto.Rol, System.StringComparison.OrdinalIgnoreCase)))
+                var invalidRole = requestedRoles.FirstOrDefault(r => !allowedTargets.Any(a => string.Equals(a, r, System.StringComparison.OrdinalIgnoreCase)));
+                if (invalidRole != null)
                 {
-                    return Forbid($"El rol '{callerRole}' no está autorizado para crear cuentas con rol '{registerDto.Rol}'.");
+                    return Forbid($"El rol '{callerRole}' no está autorizado para crear cuentas con rol '{invalidRole}'.");
                 }
             }
 
@@ -81,14 +93,13 @@ namespace back.Controllers
                 Nombre = registerDto.Nombre,
                 Apellido = registerDto.Apellido,
                 Correo = registerDto.Correo,
-                Rol = registerDto.Rol,
                 UserId = user.Id
             };
+            persona.SetRoles(requestedRoles);
 
             _context.Personas.Add(persona);
             await _context.SaveChangesAsync();
 
-            // Attach persona to user so the token includes role and the correct NameIdentifier claim (user id)
             user.Persona = persona;
 
             return new UserDto
@@ -96,6 +107,7 @@ namespace back.Controllers
                 Id = user.Id,
                 Username = user.Username,
                 Token = _tokenService.CreateToken(user),
+                Roles = persona.GetRoles(),
                 Rol = persona.Rol,
                 Nombre = persona.Nombre,
                 Apellido = persona.Apellido,
@@ -134,16 +146,47 @@ namespace back.Controllers
                 }
             }
 
+            var roles = user.Persona != null ? user.Persona.GetRoles() : new List<string>();
+
             return new UserDto
             {
                 Id = user.Id,
                 Username = user.Username,
                 Token = _tokenService.CreateToken(user),
-                Rol = user.Persona?.Rol,
+                Roles = roles,
+                Rol = user.Persona?.Rol ?? string.Empty,
                 Nombre = user.Persona?.Nombre,
                 Apellido = user.Persona?.Apellido,
                 Correo = user.Persona?.Correo
             };
+        }
+
+        private static List<string> GetRequestedRoles(List<string> roles, string legacyRole)
+        {
+            var requested = new List<string>();
+            if (roles != null)
+            {
+                requested.AddRange(roles.Where(r => !string.IsNullOrWhiteSpace(r)));
+            }
+            if (!string.IsNullOrWhiteSpace(legacyRole))
+            {
+                requested.AddRange(legacyRole.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+            return requested
+                .Select(r => r.Trim())
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static List<string> GetRolesFromClaims(IEnumerable<Claim> claims)
+        {
+            return claims
+                .Where(claim => claim.Type == ClaimTypes.Role)
+                .Select(claim => claim.Value)
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private async Task<bool> UserExists(string username)

@@ -20,6 +20,7 @@ namespace back.Entities
         public ICollection<Asistencia> AsistenciasEstudiante { get; set; } = new List<Asistencia>();
         public ICollection<Clase> ClasesDocente { get; set; } = new List<Clase>();
         public ICollection<Clase> ClasesEstudiante { get; set; } = new List<Clase>();
-        public ICollection<RecursoVistoPorEstudiante> RecursosVistos { get; set; } = new List<RecursoVistoPorEstudiante>(); // Añadido
+        public ICollection<RecursoVistoPorEstudiante> RecursosVistos { get; set; } = new List<RecursoVistoPorEstudiante>();
+        public ICollection<Presentacion> PresentacionesJurado { get; set; } = new List<Presentacion>();
     }
 }

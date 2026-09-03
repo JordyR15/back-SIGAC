@@ -25,9 +25,13 @@ namespace back.Services
                 new Claim(System.Security.Claims.ClaimTypes.Name, user.Username)
             };
 
-            if (user.Persona != null && !string.IsNullOrEmpty(user.Persona.Rol))
+            if (user.Persona != null)
             {
-                claims.Add(new Claim(System.Security.Claims.ClaimTypes.Role, user.Persona.Rol));
+                var roles = user.Persona.GetRoles();
+                foreach (var role in roles)
+                {
+                    claims.Add(new Claim(System.Security.Claims.ClaimTypes.Role, role));
+                }
             }
 
             var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
