@@ -17,6 +17,9 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "SIGAC API", Version = "v1" });
 
+    // Evita colisiones de nombres de clases/DTOs
+    c.CustomSchemaIds(type => type.FullName);
+
     // Define the BearerAuth scheme
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -64,13 +67,20 @@ else
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 
+// Configure JWT authentication. Read TokenKey from configuration or environment and fail fast with a clear error
+var tokenKey = builder.Configuration["TokenKey"] ?? Environment.GetEnvironmentVariable("TOKEN_KEY");
+if (string.IsNullOrWhiteSpace(tokenKey))
+{
+    throw new InvalidOperationException("TokenKey no está configurado. Establezca 'TokenKey' en appsettings.json o la variable de entorno 'TOKEN_KEY'.");
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["TokenKey"])),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey)),
             ValidateIssuer = false,
             ValidateAudience = false
         };
@@ -80,23 +90,26 @@ var app = builder.Build();
 
 app.UseMiddleware<ExceptionMiddleware>();
 
-// Configure the HTTP request pipeline.
+// 1. Colocar UseCors PRIMERO
+app.UseCors(x => x
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()
+    .SetIsOriginAllowed(origin => true)); // Permite localhost:3000, localhost:4200, etc.
+
+// 2. Luego Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SIGAC API V1");
-        c.RoutePrefix = string.Empty; // Set Swagger UI at apps root
+        c.RoutePrefix = string.Empty;
     });
 }
 
-app.UseHttpsRedirection();
-
-// Use CORS middleware
-app.UseCors(x => x.AllowAnyHeader().AllowAnyMethod().WithOrigins("http://localhost:3000", "https://localhost:3001", "http://localhost:52700"));
-
-app.UseAuthentication(); // This must come before UseAuthorization
+// 3. Demás middlewares
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

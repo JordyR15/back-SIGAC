@@ -345,6 +345,38 @@
   },
   {
     "ContainingType": "back.Controllers.DocenteController",
+    "Method": "ObtenerEntregasPorActividad",
+    "RelativePath": "api/Docente/actividades/{actividadId}/entregas",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "actividadId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "CalificarEntrega",
+    "RelativePath": "api/Docente/actividades/calificar",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.CalificarEntregaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
     "Method": "MonitorearCumplimientoAyudante",
     "RelativePath": "api/Docente/ayudantias/{ayudantiaId}/monitoreo",
     "HttpMethod": "GET",
@@ -418,6 +450,74 @@
         "Name": "evaluacionDto",
         "Type": "back.DTOs.EvaluacionDto",
         "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "ValidacionMalla",
+    "RelativePath": "api/Estudiante/{id}/validacion-malla",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "catedraId",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "EntregarActividad",
+    "RelativePath": "api/Estudiante/actividades/{actividadId}/entregar",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "actividadId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "archivo",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "RegistrarBitacoraMultipart",
+    "RelativePath": "api/Estudiante/ayudantias/{ayudantiaId}/bitacora-multipart",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ayudantiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "ActividadesRealizadas",
+        "Type": "System.String",
+        "IsRequired": false
+      },
+      {
+        "Name": "Archivo",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
       }
     ],
     "ReturnTypes": []

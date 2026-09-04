@@ -167,12 +167,16 @@ namespace back.Controllers
             }
 
             var totalCursos = await _context.Catedras.CountAsync();
-            var cursosAprobados = inscripciones.Count(i => i.PromedioActual >= 60m);
+            var cursosAprobados = inscripciones.Count(i => i.PromedioActual >= 60.0);
             var porcentajeAvance = totalCursos > 0 ? (double)cursosAprobados / totalCursos * 100d : 0d;
             var promedioGeneral = inscripciones.Average(i => i.PromedioActual);
             var promedioCurso = catedraId.HasValue
-                ? inscripciones.Where(i => i.CatedraId == catedraId.Value).Select(i => i.PromedioActual).DefaultIfEmpty(0m).Average()
-                : (decimal?)null;
+                ? (double?)inscripciones
+                    .Where(i => i.CatedraId == catedraId.Value)
+                    .Select(i => i.PromedioActual)
+                    .DefaultIfEmpty(0.0)
+                    .Average()
+                : (double?)null;
 
             return Ok(new
             {
@@ -181,16 +185,17 @@ namespace back.Controllers
                 CursosAprobados = cursosAprobados,
                 TotalCursos = totalCursos,
                 PromedioGeneral = Math.Round(promedioGeneral, 2),
-                PromedioCurso = promedioCurso.HasValue ? Math.Round(promedioCurso.Value, 2) : null,
+                PromedioCurso = promedioCurso.HasValue ? (double?)Math.Round(promedioCurso.Value, 2) : (double?)null,
                 CursoId = catedraId,
                 CumpleMalla = porcentajeAvance >= 50,
-                CumplePromedioGeneral = promedioGeneral >= 60m,
-                CumplePromedioCurso = !catedraId.HasValue || (promedioCurso.HasValue && promedioCurso.Value >= 60m)
+                CumplePromedioGeneral = promedioGeneral >= 60.0,
+                CumplePromedioCurso = !catedraId.HasValue || (promedioCurso.HasValue && promedioCurso.Value >= 60.0)
             });
         }
 
         [HttpPost("actividades/{actividadId}/entregar")]
-        public async Task<IActionResult> EntregarActividad(int actividadId, [FromForm] IFormFile archivo)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> EntregarActividad(int actividadId, IFormFile archivo)
         {
             if (EstudianteId == null) return Unauthorized();
             if (archivo == null || archivo.Length == 0) return BadRequest("Debe adjuntar un archivo.");
@@ -237,22 +242,23 @@ namespace back.Controllers
         }
 
         [HttpPost("ayudantias/{ayudantiaId}/bitacora-multipart")]
-        public async Task<IActionResult> RegistrarBitacoraMultipart(int ayudantiaId, [FromForm] IFormFile archivo, [FromForm] string actividadesRealizadas)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> RegistrarBitacoraMultipart(int ayudantiaId, [FromForm] RegistrarBitacoraMultipartDto dto)
         {
             var authResult = await CheckAyudantiaOwnershipAsync(ayudantiaId);
             if (authResult != null) return authResult;
 
             var evidenciaUrl = string.Empty;
-            if (archivo != null && archivo.Length > 0)
+            if (dto.Archivo != null && dto.Archivo.Length > 0)
             {
                 var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "bitacoras", $"ayudantia-{ayudantiaId}");
                 Directory.CreateDirectory(uploadsFolder);
-                var fileName = $"{Guid.NewGuid():N}_{Path.GetFileName(archivo.FileName)}";
+                var fileName = $"{Guid.NewGuid():N}_{Path.GetFileName(dto.Archivo.FileName)}";
                 var filePath = Path.Combine(uploadsFolder, fileName);
 
                 await using (var stream = new FileStream(filePath, FileMode.Create))
                 {
-                    await archivo.CopyToAsync(stream);
+                    await dto.Archivo.CopyToAsync(stream);
                 }
 
                 evidenciaUrl = $"/uploads/bitacoras/ayudantia-{ayudantiaId}/{fileName}";
@@ -262,7 +268,7 @@ namespace back.Controllers
             {
                 AyudantiaId = ayudantiaId,
                 Fecha = DateTime.UtcNow,
-                ActividadesRealizadas = actividadesRealizadas,
+                ActividadesRealizadas = dto.ActividadesRealizadas,
                 EvidenciaUrl = evidenciaUrl
             };
 
