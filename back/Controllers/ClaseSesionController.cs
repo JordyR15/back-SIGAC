@@ -61,7 +61,11 @@ namespace back.Controllers
             if (UserId == null) return Unauthorized();
             if (!await IsDocenteOfClaseSesionContext(createClaseSesionDto.MateriaId, createClaseSesionDto.ClaseId))
             {
-                return Forbid("Solo el docente responsable de la materia o clase puede crear sesiones.");
+                // Cambiar:
+                // return Forbid("Solo el docente responsable de la materia o clase puede crear sesiones.");
+
+                // Por:
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo el docente responsable de la materia o clase puede crear sesiones." });
             }
 
             var claseSesion = new ClaseSesion
@@ -121,7 +125,11 @@ namespace back.Controllers
 
             if (!isDocente && !isStudentInMateria && !isStudentInClase)
             {
-                return Forbid("No tienes permiso para ver esta sesión de clase.");
+                // Cambiar:
+                // return Forbid("No tienes permiso para ver esta sesión de clase.");
+
+                // Por:
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tienes permiso para ver esta sesión de clase." });
             }
 
             return Ok(new ClaseSesionDto
@@ -199,7 +207,12 @@ namespace back.Controllers
                 }
             }
 
-            if (!authorizedSesiones.Any()) return Forbid("No tienes permiso para ver estas sesiones de clase.");
+            // Cambiar:
+            // if (!authorizedSesiones.Any()) return Forbid("No tienes permiso para ver estas sesiones de clase.");
+
+            // Por:
+            if (!authorizedSesiones.Any())
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tienes permiso para ver estas sesiones de clase." });
 
             return Ok(authorizedSesiones);
         }
@@ -216,7 +229,11 @@ namespace back.Controllers
 
             if (claseSesion.DocenteId != UserId.Value)
             {
-                return Forbid("Solo el docente de esta sesión puede registrar asistencia.");
+                // Cambiar:
+                // return Forbid("Solo el docente de esta sesión puede registrar asistencia.");
+
+                // Por:
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo el docente de esta sesión puede registrar asistencia." });
             }
 
             // CAMBIO AQUÍ: u.Persona.Tipo -> u.Persona.Rol
@@ -260,7 +277,11 @@ namespace back.Controllers
 
             if (claseSesion.DocenteId != UserId.Value)
             {
-                return Forbid("Solo el docente de esta sesión puede ver la asistencia.");
+                // Cambiar:
+                // return Forbid("Solo el docente de esta sesión puede ver la asistencia.");
+
+                // Por:
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo el docente de esta sesión puede ver la asistencia." });
             }
 
             var asistencias = await _context.Asistencias

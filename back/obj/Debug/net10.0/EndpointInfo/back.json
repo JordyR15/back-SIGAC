@@ -1034,6 +1034,18 @@
         }
       }
     },
+    "/api/Estudiante/mis-materias": {
+      "get": {
+        "tags": [
+          "Estudiante"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Estudiante/ayudantias/{ayudantiaId}/bitacora-multipart": {
       "post": {
         "tags": [

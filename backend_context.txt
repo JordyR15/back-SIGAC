@@ -1,0 +1,3953 @@
+﻿=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\AppDbContext.cs ===
+using back.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace back.Data
+{
+    public class AppDbContext : DbContext
+    {
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+        {
+        }
+
+        public DbSet<User> Users { get; set; }
+        public DbSet<Persona> Personas { get; set; }
+        public DbSet<Catedra> Catedras { get; set; }
+        public DbSet<Inscripcion> Inscripciones { get; set; }
+        public DbSet<Evaluacion> Evaluaciones { get; set; }
+        public DbSet<IndicadorCualitativo> IndicadoresCualitativos { get; set; }
+        public DbSet<Ayudantia> Ayudantias { get; set; }
+        public DbSet<ActividadAyudantia> ActividadesAyudantia { get; set; }
+        public DbSet<Bitacora> Bitacoras { get; set; }
+        public DbSet<CronogramaActividad> Cronogramas { get; set; }
+        public DbSet<Recurso> Recursos { get; set; }
+        public DbSet<Actividad> Actividades { get; set; }
+        public DbSet<ClaseSesion> ClasesSesiones { get; set; }
+        public DbSet<Asistencia> Asistencias { get; set; }
+        public DbSet<Clase> Clases { get; set; }
+        public DbSet<RecursoVistoPorEstudiante> RecursosVistosPorEstudiante { get; set; } // AÃ±adido
+
+        // Presentaciones y evaluaciones realizadas por jurados en las postulaciones
+        public DbSet<Presentacion> Presentaciones { get; set; }
+        public DbSet<PresentacionEvaluacion> PresentacionEvaluaciones { get; set; }
+
+        // Import jobs (bulk upload audits/results)
+        public DbSet<ImportJob> ImportJobs { get; set; }
+        public DbSet<ImportJobEntry> ImportJobEntries { get; set; }
+        public DbSet<EstudianteActividadRealizada> EstudianteActividadesRealizadas { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // RelaciÃ³n uno a uno User <-> Persona
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.Persona)
+                .WithOne(p => p.User)
+                .HasForeignKey<Persona>(p => p.UserId);
+
+            // Relaciones de Inscripcion
+            modelBuilder.Entity<Inscripcion>()
+                .HasKey(i => new { i.EstudianteId, i.CatedraId });
+
+            modelBuilder.Entity<Inscripcion>()
+                .HasOne(i => i.Estudiante)
+                .WithMany(u => u.Inscripciones)
+                .HasForeignKey(i => i.EstudianteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Inscripcion>()
+                .HasOne(i => i.Catedra)
+                .WithMany(c => c.Inscripciones)
+                .HasForeignKey(i => i.CatedraId);
+
+            // Relaciones de Catedra
+            modelBuilder.Entity<Catedra>()
+                .HasOne(c => c.Docente)
+                .WithMany(u => u.CatedrasDocente)
+                .HasForeignKey(c => c.DocenteId);
+
+            // Relaciones de Ayudantia
+            modelBuilder.Entity<Ayudantia>()
+                .HasOne(a => a.Catedra)
+                .WithMany(c => c.Ayudantias)
+                .HasForeignKey(a => a.CatedraId);
+
+            modelBuilder.Entity<Ayudantia>()
+                .HasOne(a => a.Estudiante)
+                .WithMany(u => u.AyudantiasEstudiante)
+                .HasForeignKey(a => a.EstudianteId);
+
+            // Relaciones para ClaseSesion
+            modelBuilder.Entity<ClaseSesion>()
+                .HasOne(cs => cs.Materia)
+                .WithMany(m => m.ClasesSesiones)
+                .HasForeignKey(cs => cs.MateriaId);
+
+            modelBuilder.Entity<ClaseSesion>()
+                .HasOne(cs => cs.Docente)
+                .WithMany(u => u.ClasesSesionesDocente)
+                .HasForeignKey(cs => cs.DocenteId);
+
+            // Relaciones para Asistencia
+            modelBuilder.Entity<Asistencia>()
+                .HasOne(a => a.ClaseSesion)
+                .WithMany(cs => cs.Asistencias)
+                .HasForeignKey(a => a.ClaseSesionId);
+
+            modelBuilder.Entity<Asistencia>()
+                .HasOne(a => a.Estudiante)
+                .WithMany(u => u.AsistenciasEstudiante)
+                .HasForeignKey(a => a.EstudianteId);
+
+            // Relaciones para Clase
+            modelBuilder.Entity<Clase>()
+                .HasOne(c => c.Materia)
+                .WithMany(m => m.Clases)
+                .HasForeignKey(c => c.MateriaId);
+
+            modelBuilder.Entity<Clase>()
+                .HasOne(c => c.Docente)
+                .WithMany(u => u.ClasesDocente)
+                .HasForeignKey(c => c.DocenteId);
+
+            // RelaciÃ³n muchos a muchos entre Clase y User (Estudiantes)
+            modelBuilder.Entity<Clase>()
+                .HasMany(c => c.Estudiantes)
+                .WithMany(u => u.ClasesEstudiante)
+                .UsingEntity(j => j.ToTable("ClaseEstudiante")); // Tabla de uniÃ³n
+
+            // Relaciones para RecursoVistoPorEstudiante
+            modelBuilder.Entity<RecursoVistoPorEstudiante>()
+                .HasOne(rv => rv.Recurso)
+                .WithMany() // No necesitamos una colecciÃ³n en Recurso para esto
+                .HasForeignKey(rv => rv.RecursoId);
+
+            modelBuilder.Entity<RecursoVistoPorEstudiante>()
+                .HasOne(rv => rv.Estudiante)
+                .WithMany(u => u.RecursosVistos) // Asumiendo que User tiene esta colecciÃ³n
+                .HasForeignKey(rv => rv.EstudianteId);
+
+            // Relaciones para Presentacion y PresentacionEvaluacion
+            modelBuilder.Entity<Presentacion>()
+                .HasOne(p => p.Ayudantia)
+                .WithMany(a => a.Presentaciones)
+                .HasForeignKey(p => p.AyudantiaId);
+
+            modelBuilder.Entity<Presentacion>()
+                .HasMany(p => p.Jurados)
+                .WithMany(u => u.PresentacionesJurado)
+                .UsingEntity(j => j.ToTable("PresentacionJurado"));
+
+            modelBuilder.Entity<PresentacionEvaluacion>()
+                .HasOne(pe => pe.Presentacion)
+                .WithMany(p => p.Evaluaciones)
+                .HasForeignKey(pe => pe.PresentacionId);
+
+            modelBuilder.Entity<PresentacionEvaluacion>()
+                .HasOne(pe => pe.Jurado)
+                .WithMany() // No necesitamos colecciÃ³n inversa por ahora
+                .HasForeignKey(pe => pe.JuradoId);
+
+            modelBuilder.Entity<Presentacion>()
+                .HasOne(p => p.Decano)
+                .WithMany()
+                .HasForeignKey(p => p.DecanoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Presentacion>()
+                .HasOne(p => p.CoordinadorCarrera)
+                .WithMany()
+                .HasForeignKey(p => p.CoordinadorCarreraId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // ImportJob relations
+            modelBuilder.Entity<ImportJob>()
+                .HasOne(j => j.CreatedBy)
+                .WithMany() // no collection on User for jobs
+                .HasForeignKey(j => j.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ImportJobEntry>()
+                .HasOne(e => e.ImportJob)
+                .WithMany(j => j.Entries)
+                .HasForeignKey(e => e.ImportJobId);
+
+            modelBuilder.Entity<EstudianteActividadRealizada>()
+                .HasKey(e => e.Id);
+
+            modelBuilder.Entity<EstudianteActividadRealizada>()
+                .HasOne(e => e.Estudiante)
+                .WithMany()
+                .HasForeignKey(e => e.EstudianteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<EstudianteActividadRealizada>()
+                .HasOne(e => e.Actividad)
+                .WithMany()
+                .HasForeignKey(e => e.ActividadId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Program.cs ===
+using System.Text;
+using back.Data;
+using back.Middleware;
+using back.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer(); // Needed for API Explorer
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SIGAC API", Version = "v1" });
+
+    // Evita colisiones de nombres de clases/DTOs
+    c.CustomSchemaIds(type => type.FullName);
+
+    // Define the BearerAuth scheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement()
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+                Scheme = "oauth2",
+                Name = "Bearer",
+                In = ParameterLocation.Header,
+            },
+            new List<string>()
+        }
+    });
+});
+
+builder.Services.AddCors(); // Add CORS services
+
+var defaultConn = builder.Configuration.GetConnectionString("DefaultConnection");
+var useInMemory = (builder.Configuration["USE_INMEMORY"] ?? Environment.GetEnvironmentVariable("USE_INMEMORY")) == "true";
+if (string.IsNullOrEmpty(defaultConn) || useInMemory)
+{
+    // Use in-memory DB for local testing if no connection string is configured or USE_INMEMORY=true
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseInMemoryDatabase("SIGAC_InMemory"));
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(defaultConn));
+}
+
+builder.Services.AddScoped<ITokenService, TokenService>();
+
+// Configure JWT authentication. Read TokenKey from configuration or environment and fail fast with a clear error
+var tokenKey = builder.Configuration["TokenKey"] ?? Environment.GetEnvironmentVariable("TOKEN_KEY");
+if (string.IsNullOrWhiteSpace(tokenKey))
+{
+    throw new InvalidOperationException("TokenKey no estÃ¡ configurado. Establezca 'TokenKey' en appsettings.json o la variable de entorno 'TOKEN_KEY'.");
+}
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+
+var app = builder.Build();
+
+app.UseMiddleware<ExceptionMiddleware>();
+
+// 1. Colocar UseCors PRIMERO
+app.UseCors(x => x
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()
+    .SetIsOriginAllowed(origin => true)); // Permite localhost:3000, localhost:4200, etc.
+
+// 2. Luego Swagger
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SIGAC API V1");
+        c.RoutePrefix = string.Empty;
+    });
+}
+
+// 3. DemÃ¡s middlewares
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\ClaseController.cs ===
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ClaseController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public ClaseController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        private int? UserId
+        {
+            get
+            {
+                var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                return int.TryParse(value, out var id) ? id : (int?)null;
+            }
+        }
+
+        // Helper para verificar si el usuario es docente de la materia o de la clase
+        private async Task<bool> IsDocenteOfMateria(int materiaId)
+        {
+            if (UserId == null) return false;
+            return await _context.Catedras.AnyAsync(m => m.Id == materiaId && m.DocenteId == UserId.Value);
+        }
+
+        private async Task<bool> IsDocenteOfClase(int claseId)
+        {
+            if (UserId == null) return false;
+            return await _context.Clases.AnyAsync(c => c.Id == claseId && c.DocenteId == UserId.Value);
+        }
+
+        // Endpoint para crear una nueva instancia de Clase (solo docentes)
+        [HttpPost]
+        public async Task<IActionResult> CreateClase([FromBody] CreateClaseDto createClaseDto)
+        {
+            if (UserId == null) return Unauthorized();
+
+            // Verificar si el usuario autenticado es el docente que se estÃ¡ asignando a la clase
+            if (createClaseDto.DocenteId != UserId.Value)
+            {
+                return Forbid("Solo puedes crear clases para ti mismo como docente.");
+            }
+
+            // Verificar si la materia existe
+            var materia = await _context.Catedras.FindAsync(createClaseDto.MateriaId);
+            if (materia == null) return NotFound(new { message = "Materia no encontrada." });
+
+            // Verificar si el docente es realmente docente de esa materia (opcional, pero buena prÃ¡ctica)
+            if (!await IsDocenteOfMateria(createClaseDto.MateriaId))
+            {
+                return Forbid("El docente asignado no es responsable de esta materia.");
+            }
+
+            var clase = new Clase
+            {
+                Nombre = createClaseDto.Nombre,
+                MateriaId = createClaseDto.MateriaId,
+                DocenteId = createClaseDto.DocenteId
+            };
+
+            // AÃ±adir estudiantes si se proporcionan
+            if (createClaseDto.EstudianteIds != null && createClaseDto.EstudianteIds.Any())
+            {
+                var estudiantes = await _context.Users
+                                                .Where(u => createClaseDto.EstudianteIds.Contains(u.Id) && u.Persona.Rol == "Estudiante") // Corregido: Tipo -> Rol
+                                                .ToListAsync();
+                if (estudiantes.Count != createClaseDto.EstudianteIds.Count)
+                {
+                    return BadRequest("Algunos IDs de estudiantes proporcionados no son vÃ¡lidos o no corresponden a estudiantes.");
+                }
+                foreach (var estudiante in estudiantes)
+                {
+                    clase.Estudiantes.Add(estudiante);
+                }
+            }
+
+            _context.Clases.Add(clase);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetClaseById), new { id = clase.Id }, new ClaseDto
+            {
+                Id = clase.Id,
+                Nombre = clase.Nombre,
+                MateriaId = clase.MateriaId,
+                DocenteId = clase.DocenteId,
+                EstudianteIds = clase.Estudiantes.Select(e => e.Id).ToList()
+            });
+        }
+
+        // Endpoint para obtener una clase por ID
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ClaseDto>> GetClaseById(int id)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var clase = await _context.Clases
+                                .Include(c => c.Estudiantes)
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(c => c.Id == id);
+
+            if (clase == null) return NotFound();
+
+            // AutorizaciÃ³n: Docente de la clase o estudiante inscrito en la clase
+            var isDocente = clase.DocenteId == UserId.Value;
+            var isStudent = clase.Estudiantes.Any(e => e.Id == UserId.Value);
+
+            if (!isDocente && !isStudent)
+            {
+                return Forbid("No tienes permiso para ver esta clase.");
+            }
+
+            return Ok(new ClaseDto
+            {
+                Id = clase.Id,
+                Nombre = clase.Nombre,
+                MateriaId = clase.MateriaId,
+                DocenteId = clase.DocenteId,
+                EstudianteIds = clase.Estudiantes.Select(e => e.Id).ToList()
+            });
+        }
+
+        // Endpoint para aÃ±adir estudiantes a una clase existente (solo docentes de la clase)
+        [HttpPost("{claseId}/estudiantes")]
+        public async Task<IActionResult> AddEstudiantesToClase(int claseId, [FromBody] List<int> estudianteIds)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfClase(claseId)) return Forbid("Solo el docente de esta clase puede aÃ±adir estudiantes.");
+
+            var clase = await _context.Clases
+                                .Include(c => c.Estudiantes)
+                                .FirstOrDefaultAsync(c => c.Id == claseId);
+
+            if (clase == null) return NotFound(new { message = "Clase no encontrada." });
+
+            var newEstudiantes = await _context.Users
+                                            .Where(u => estudianteIds.Contains(u.Id) && u.Persona.Rol == "Estudiante") // Corregido: Tipo -> Rol
+                                            .ToListAsync();
+
+            if (newEstudiantes.Count != estudianteIds.Count)
+            {
+                return BadRequest("Algunos IDs de estudiantes proporcionados no son vÃ¡lidos o no corresponden a estudiantes.");
+            }
+
+            foreach (var estudiante in newEstudiantes)
+            {
+                if (!clase.Estudiantes.Any(e => e.Id == estudiante.Id))
+                {
+                    clase.Estudiantes.Add(estudiante);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Estudiantes aÃ±adidos exitosamente a la clase." });
+        }
+
+        // Endpoint para obtener los estudiantes de una clase (docentes de la clase o estudiantes de la clase)
+        [HttpGet("{claseId}/estudiantes")]
+        public async Task<ActionResult<IEnumerable<UserDto>>> GetEstudiantesFromClase(int claseId)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var clase = await _context.Clases
+                                .Include(c => c.Estudiantes)
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(c => c.Id == claseId);
+
+            if (clase == null) return NotFound(new { message = "Clase no encontrada." });
+
+            // AutorizaciÃ³n: Docente de la clase o estudiante inscrito en la clase
+            var isDocente = clase.DocenteId == UserId.Value;
+            var isStudent = clase.Estudiantes.Any(e => e.Id == UserId.Value);
+
+            if (!isDocente && !isStudent)
+            {
+                return Forbid("No tienes permiso para ver los estudiantes de esta clase.");
+            }
+
+            var estudiantesDto = clase.Estudiantes.Select(e => new UserDto
+            {
+                Id = e.Id,
+                Username = e.Username,
+                // No incluir PasswordHash ni PasswordSalt por seguridad
+                // Puedes incluir otros datos de Persona si es necesario
+            }).ToList();
+
+            return Ok(estudiantesDto);
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\ClaseSesionController.cs ===
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ClaseSesionController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public ClaseSesionController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        private int? UserId
+        {
+            get
+            {
+                var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                return int.TryParse(value, out var id) ? id : (int?)null;
+            }
+        }
+
+        // Helper para verificar si el usuario es docente de la materia o de la clase
+        private async Task<bool> IsDocenteOfClaseSesionContext(int materiaId, int? claseId)
+        {
+            if (UserId == null) return false;
+
+            // Check if docente of Materia
+            var isDocenteMateria = await _context.Catedras.AsNoTracking()
+                                        .AnyAsync(m => m.Id == materiaId && m.DocenteId == UserId.Value);
+            if (isDocenteMateria) return true;
+
+            // Check if docente of Clase (if claseId is provided)
+            if (claseId.HasValue)
+            {
+                var isDocenteClase = await _context.Clases.AsNoTracking()
+                                            .AnyAsync(c => c.Id == claseId.Value && c.DocenteId == UserId.Value);
+                if (isDocenteClase) return true;
+            }
+
+            return false;
+        }
+
+        // Endpoint para crear una sesiÃ³n de clase (solo docentes)
+        [HttpPost]
+        public async Task<IActionResult> CreateClaseSesion([FromBody] CreateClaseSesionDto createClaseSesionDto)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfClaseSesionContext(createClaseSesionDto.MateriaId, createClaseSesionDto.ClaseId))
+            {
+                return Forbid("Solo el docente responsable de la materia o clase puede crear sesiones.");
+            }
+
+            var claseSesion = new ClaseSesion
+            {
+                MateriaId = createClaseSesionDto.MateriaId,
+                ClaseId = createClaseSesionDto.ClaseId,
+                DocenteId = UserId.Value, // El docente que crea la sesiÃ³n es el autenticado
+                Fecha = createClaseSesionDto.Fecha,
+                HoraInicio = createClaseSesionDto.HoraInicio,
+                HoraFin = createClaseSesionDto.HoraFin,
+                TipoClase = createClaseSesionDto.TipoClase,
+                LinkVirtual = createClaseSesionDto.LinkVirtual,
+                AplicacionVirtual = createClaseSesionDto.AplicacionVirtual,
+                EdificioPresencial = createClaseSesionDto.EdificioPresencial,
+                AulaPresencial = createClaseSesionDto.AulaPresencial,
+                PisoPresencial = createClaseSesionDto.PisoPresencial
+            };
+
+            _context.ClasesSesiones.Add(claseSesion);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetClaseSesionById), new { id = claseSesion.Id }, new ClaseSesionDto
+            {
+                Id = claseSesion.Id,
+                MateriaId = claseSesion.MateriaId,
+                ClaseId = claseSesion.ClaseId,
+                DocenteId = claseSesion.DocenteId,
+                Fecha = claseSesion.Fecha,
+                HoraInicio = claseSesion.HoraInicio,
+                HoraFin = claseSesion.HoraFin,
+                TipoClase = claseSesion.TipoClase,
+                LinkVirtual = claseSesion.LinkVirtual,
+                AplicacionVirtual = claseSesion.AplicacionVirtual,
+                EdificioPresencial = claseSesion.EdificioPresencial,
+                AulaPresencial = claseSesion.AulaPresencial,
+                PisoPresencial = claseSesion.PisoPresencial
+            });
+        }
+
+        // Endpoint para obtener una sesiÃ³n de clase por ID
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ClaseSesionDto>> GetClaseSesionById(int id)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var claseSesion = await _context.ClasesSesiones
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(cs => cs.Id == id);
+
+            if (claseSesion == null) return NotFound();
+
+            // AutorizaciÃ³n: Docente de la sesiÃ³n, o estudiante inscrito en la materia/clase
+            var isDocente = claseSesion.DocenteId == UserId.Value;
+            var isStudentInMateria = await _context.Inscripciones.AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == claseSesion.MateriaId);
+            var isStudentInClase = claseSesion.ClaseId.HasValue && await _context.Clases.AnyAsync(c => c.Id == claseSesion.ClaseId.Value && c.Estudiantes.Any(e => e.Id == UserId.Value));
+
+
+            if (!isDocente && !isStudentInMateria && !isStudentInClase)
+            {
+                return Forbid("No tienes permiso para ver esta sesiÃ³n de clase.");
+            }
+
+            return Ok(new ClaseSesionDto
+            {
+                Id = claseSesion.Id,
+                MateriaId = claseSesion.MateriaId,
+                ClaseId = claseSesion.ClaseId,
+                DocenteId = claseSesion.DocenteId,
+                Fecha = claseSesion.Fecha,
+                HoraInicio = claseSesion.HoraInicio,
+                HoraFin = claseSesion.HoraFin,
+                TipoClase = claseSesion.TipoClase,
+                LinkVirtual = claseSesion.LinkVirtual,
+                AplicacionVirtual = claseSesion.AplicacionVirtual,
+                EdificioPresencial = claseSesion.EdificioPresencial,
+                AulaPresencial = claseSesion.AulaPresencial,
+                PisoPresencial = claseSesion.PisoPresencial
+            });
+        }
+
+        // Endpoint para obtener sesiones de clase por materia o clase (para estudiantes y docentes)
+        [HttpGet("materia/{materiaId}")]
+        [HttpGet("clase/{claseId}")]
+        public async Task<ActionResult<IEnumerable<ClaseSesionDto>>> GetClaseSesiones(int? materiaId = null, int? claseId = null)
+        {
+            if (UserId == null) return Unauthorized();
+
+            IQueryable<ClaseSesion> query = _context.ClasesSesiones.AsNoTracking();
+
+            if (materiaId.HasValue)
+            {
+                query = query.Where(cs => cs.MateriaId == materiaId.Value);
+            }
+            else if (claseId.HasValue)
+            {
+                query = query.Where(cs => cs.ClaseId == claseId.Value);
+            }
+            else
+            {
+                return BadRequest("Debe proporcionar un ID de materia o un ID de clase.");
+            }
+
+            var sesiones = await query
+                                .Select(cs => new ClaseSesionDto
+                                {
+                                    Id = cs.Id,
+                                    MateriaId = cs.MateriaId,
+                                    ClaseId = cs.ClaseId,
+                                    DocenteId = cs.DocenteId,
+                                    Fecha = cs.Fecha,
+                                    HoraInicio = cs.HoraInicio,
+                                    HoraFin = cs.HoraFin,
+                                    TipoClase = cs.TipoClase,
+                                    LinkVirtual = cs.LinkVirtual,
+                                    AplicacionVirtual = cs.AplicacionVirtual,
+                                    EdificioPresencial = cs.EdificioPresencial,
+                                    AulaPresencial = cs.AulaPresencial,
+                                    PisoPresencial = cs.PisoPresencial
+                                })
+                                .ToListAsync();
+
+            if (!sesiones.Any()) return NotFound("No se encontraron sesiones de clase.");
+
+            // Filtrar por autorizaciÃ³n (docente de la materia/clase o estudiante inscrito)
+            var authorizedSesiones = new List<ClaseSesionDto>();
+            foreach (var sesion in sesiones)
+            {
+                var isDocente = sesion.DocenteId == UserId.Value;
+                var isStudentInMateria = await _context.Inscripciones.AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == sesion.MateriaId);
+                var isStudentInClase = sesion.ClaseId.HasValue && await _context.Clases.AnyAsync(c => c.Id == sesion.ClaseId.Value && c.Estudiantes.Any(e => e.Id == UserId.Value));
+
+                if (isDocente || isStudentInMateria || isStudentInClase)
+                {
+                    authorizedSesiones.Add(sesion);
+                }
+            }
+
+            if (!authorizedSesiones.Any()) return Forbid("No tienes permiso para ver estas sesiones de clase.");
+
+            return Ok(authorizedSesiones);
+        }
+
+
+        // Endpoint para registrar asistencia a una sesiÃ³n de clase (solo docentes)
+        [HttpPost("{claseSesionId}/asistencia")]
+        public async Task<IActionResult> RegisterAsistencia(int claseSesionId, [FromBody] CreateAsistenciaDto createAsistenciaDto)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var claseSesion = await _context.ClasesSesiones.FindAsync(claseSesionId);
+            if (claseSesion == null) return NotFound("SesiÃ³n de clase no encontrada.");
+
+            if (claseSesion.DocenteId != UserId.Value)
+            {
+                return Forbid("Solo el docente de esta sesiÃ³n puede registrar asistencia.");
+            }
+
+            // CAMBIO AQUÃ: u.Persona.Tipo -> u.Persona.Rol
+            var estudianteExists = await _context.Users.AnyAsync(u => u.Id == createAsistenciaDto.EstudianteId && u.Persona.Rol == "Estudiante");
+            if (!estudianteExists) return BadRequest("El ID de estudiante proporcionado no es vÃ¡lido.");
+
+            var existingAsistencia = await _context.Asistencias
+                                            .AnyAsync(a => a.ClaseSesionId == claseSesionId && a.EstudianteId == createAsistenciaDto.EstudianteId);
+            if (existingAsistencia)
+            {
+                return Conflict("La asistencia para este estudiante en esta sesiÃ³n ya ha sido registrada.");
+            }
+
+            var asistencia = new Asistencia
+            {
+                ClaseSesionId = claseSesionId,
+                EstudianteId = createAsistenciaDto.EstudianteId,
+                Presente = createAsistenciaDto.Presente
+            };
+
+            _context.Asistencias.Add(asistencia);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetAsistenciaByClaseSesion), new { claseSesionId = claseSesionId }, new AsistenciaDto
+            {
+                Id = asistencia.Id,
+                ClaseSesionId = asistencia.ClaseSesionId,
+                EstudianteId = asistencia.EstudianteId,
+                Presente = asistencia.Presente
+            });
+        }
+
+        // Endpoint para obtener la asistencia de una sesiÃ³n de clase (solo docentes)
+        [HttpGet("{claseSesionId}/asistencia")]
+        public async Task<ActionResult<IEnumerable<AsistenciaDto>>> GetAsistenciaByClaseSesion(int claseSesionId)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var claseSesion = await _context.ClasesSesiones.AsNoTracking().FirstOrDefaultAsync(cs => cs.Id == claseSesionId);
+            if (claseSesion == null) return NotFound("SesiÃ³n de clase no encontrada.");
+
+            if (claseSesion.DocenteId != UserId.Value)
+            {
+                return Forbid("Solo el docente de esta sesiÃ³n puede ver la asistencia.");
+            }
+
+            var asistencias = await _context.Asistencias
+                                    .Where(a => a.ClaseSesionId == claseSesionId)
+                                    .Select(a => new AsistenciaDto
+                                    {
+                                        Id = a.Id,
+                                        ClaseSesionId = a.ClaseSesionId,
+                                        EstudianteId = a.EstudianteId,
+                                        Presente = a.Presente
+                                    })
+                                    .ToListAsync();
+
+            if (!asistencias.Any()) return NotFound("No se ha registrado asistencia para esta sesiÃ³n.");
+
+            return Ok(asistencias);
+        }
+
+        // Endpoint para que un estudiante vea su asistencia a una sesiÃ³n especÃ­fica
+        [HttpGet("estudiante/asistencia/{claseSesionId}")]
+        public async Task<ActionResult<AsistenciaDto>> GetMyAsistenciaForClaseSesion(int claseSesionId)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var asistencia = await _context.Asistencias
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(a => a.ClaseSesionId == claseSesionId && a.EstudianteId == UserId.Value);
+
+            if (asistencia == null) return NotFound("No se encontrÃ³ registro de asistencia para esta sesiÃ³n.");
+
+            return Ok(new AsistenciaDto
+            {
+                Id = asistencia.Id,
+                ClaseSesionId = asistencia.ClaseSesionId,
+                EstudianteId = asistencia.EstudianteId,
+                Presente = asistencia.Presente
+            });
+        }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\CoordinadorController.cs ===
+using back.Data;
+using back.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize] // Idealmente, con un rol de "Coordinador"
+    [ApiController]
+    [Route("api/[controller]")]
+    public class CoordinadorController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public CoordinadorController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet("ayudantias/solicitudes")]
+        public async Task<IActionResult> ObtenerSolicitudesAyudantia()
+        {
+            var solicitudes = await _context.Ayudantias
+                .Where(a => a.Estado == "Pendiente")
+                .Include(a => a.Estudiante)
+                .Include(a => a.Catedra)
+                .Select(a => new SolicitudAyudantiaDto
+                {
+                    AyudantiaId = a.Id,
+                    EstudianteId = a.EstudianteId,
+                    NombreEstudiante = a.Estudiante.Username,
+                    CatedraId = a.CatedraId,
+                    NombreCatedra = a.Catedra.Nombre,
+                    Estado = a.Estado
+                })
+                .ToListAsync();
+
+            return Ok(solicitudes);
+        }
+
+        [HttpPost("ayudantias/asignar")]
+        public async Task<IActionResult> AsignarAyudante([FromBody] AsignacionAyudantiaDto asignacionDto)
+        {
+            var ayudantia = await _context.Ayudantias
+                .Include(a => a.Catedra)
+                .FirstOrDefaultAsync(a => a.Id == asignacionDto.AyudantiaId);
+            if (ayudantia == null) return NotFound("Solicitud de ayudantÃ­a no encontrada.");
+
+            // Validar nota mÃ­nima si estÃ¡ establecida en la cÃ¡tedra
+            var catedra = ayudantia.Catedra;
+            var inscripcion = await _context.Inscripciones
+                .FirstOrDefaultAsync(i => i.EstudianteId == ayudantia.EstudianteId && i.CatedraId == ayudantia.CatedraId);
+
+            if (catedra != null && catedra.MinimoNota.HasValue)
+            {
+                if (inscripcion == null)
+                {
+                    return BadRequest(new { message = "No se puede asignar: el estudiante no estÃ¡ inscrito en la cÃ¡tedra." });
+                }
+
+                if (inscripcion.PromedioActual < catedra.MinimoNota.Value)
+                {
+                    return BadRequest(new { message = "No se puede asignar: el promedio del estudiante es inferior a la nota mÃ­nima establecida." });
+                }
+            }
+
+            ayudantia.Estado = "Activa";
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Ayudante asignado exitosamente." });
+        }
+
+        [HttpPut("catedras/{catedraId}/minimo-nota")]
+        public async Task<IActionResult> SetMinimoNota(int catedraId, [FromBody] SetMinimoNotaDto dto)
+        {
+            var catedra = await _context.Catedras.FindAsync(catedraId);
+            if (catedra == null) return NotFound("CÃ¡tedra no encontrada.");
+
+            catedra.MinimoNota = dto.MinimoNota;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"Nota mÃ­nima para la cÃ¡tedra {catedraId} actualizada a {dto.MinimoNota}." });
+        }
+
+        [HttpGet("ayudantias/seguimiento")]
+        public async Task<IActionResult> SeguimientoInstitucionalAyudantias()
+        {
+            var ayudantiasActivas = await _context.Ayudantias
+                .Include(a => a.Estudiante)
+                .Include(a => a.Catedra)
+                .Select(a => new SolicitudAyudantiaDto // Reutilizamos el DTO
+                {
+                    AyudantiaId = a.Id,
+                    EstudianteId = a.EstudianteId,
+                    NombreEstudiante = a.Estudiante.Username,
+                    CatedraId = a.CatedraId,
+                    NombreCatedra = a.Catedra.Nombre,
+                    Estado = a.Estado
+                })
+                .ToListAsync();
+
+            return Ok(ayudantiasActivas);
+        }
+
+        [HttpPut("ayudantias/{ayudantiaId}/estado")]
+        public async Task<IActionResult> GestionarEstadoAyudantia(int ayudantiaId, [FromBody] GestionEstadoAyudantiaDto estadoDto)
+        {
+            var ayudantia = await _context.Ayudantias.FindAsync(ayudantiaId);
+            if (ayudantia == null) return NotFound("AyudantÃ­a no encontrada.");
+
+            ayudantia.Estado = estadoDto.NuevoEstado;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"Estado de la ayudantÃ­a actualizado a {estadoDto.NuevoEstado}." });
+        }
+
+        [HttpGet("ayudantias/reportes-administrativos")]
+        public async Task<IActionResult> GenerarReportesAdministrativos()
+        {
+            var reporte = await _context.Ayudantias
+                .GroupBy(a => a.Estado)
+                .Select(g => new { Estado = g.Key, Cantidad = g.Count() })
+                .ToListAsync();
+
+            // Este es un ejemplo simple. Se podrÃ­an generar reportes mÃ¡s complejos.
+            return Ok(reporte);
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\DocenteController.cs ===
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class DocenteController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public DocenteController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // ... (mÃ©todos ya implementados) ...
+
+        [HttpPost("catedras/{catedraId}/evaluacion-diagnostica")]
+        public async Task<IActionResult> RegistrarEvaluacionDiagnostica(int catedraId, [FromBody] EvaluacionDto evaluacionDto)
+        {
+            var evaluacion = new Evaluacion
+            {
+                Nombre = evaluacionDto.Nombre,
+                CatedraId = catedraId,
+                EsDiagnostica = true,
+                AdaptadaConIA = false
+            };
+
+            _context.Evaluaciones.Add(evaluacion);
+            await _context.SaveChangesAsync();
+
+            evaluacionDto.Id = evaluacion.Id;
+            evaluacionDto.CatedraId = catedraId;
+            evaluacionDto.EsDiagnostica = true;
+
+            return CreatedAtAction(nameof(RegistrarEvaluacionDiagnostica), new { id = evaluacion.Id }, evaluacionDto);
+        }
+
+        [HttpPut("catedras/{catedraId}/cronograma")]
+        public async Task<IActionResult> ReprogramarCronograma(int catedraId, [FromBody] CronogramaActividadDto cronogramaDto)
+        {
+            var actividad = await _context.Cronogramas.FindAsync(cronogramaDto.Id);
+            if (actividad == null || actividad.CatedraId != catedraId)
+            {
+                return NotFound("Actividad del cronograma no encontrada.");
+            }
+
+            actividad.Descripcion = cronogramaDto.Descripcion;
+            actividad.FechaPrevista = cronogramaDto.FechaPrevista;
+            actividad.FechaReal = cronogramaDto.FechaReal;
+
+            await _context.SaveChangesAsync();
+            return Ok(cronogramaDto);
+        }
+
+        [HttpPost("ayudantias/{ayudantiaId}/planificacion")]
+        public async Task<IActionResult> PlanificarActividadesAyudantia(int ayudantiaId, [FromBody] ActividadAyudantiaDto actividadDto)
+        {
+            var actividad = new ActividadAyudantia
+            {
+                AyudantiaId = ayudantiaId,
+                Descripcion = actividadDto.Descripcion,
+                FechaPlanificada = actividadDto.FechaPlanificada,
+                Completada = false
+            };
+
+            _context.ActividadesAyudantia.Add(actividad);
+            await _context.SaveChangesAsync();
+
+            actividadDto.Id = actividad.Id;
+            return CreatedAtAction(nameof(PlanificarActividadesAyudantia), new { id = actividad.Id }, actividadDto);
+        }
+
+
+
+        [HttpGet("ayudantias/{ayudantiaId}/monitoreo")]
+        public async Task<IActionResult> MonitorearCumplimientoAyudante(int ayudantiaId)
+        {
+            var ayudantia = await _context.Ayudantias
+                .Include(a => a.Estudiante)
+                .Include(a => a.Planificacion)
+                .Include(a => a.Bitacoras)
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
+
+            if (ayudantia == null) return NotFound("AyudantÃ­a no encontrada.");
+
+            var monitoreoDto = new MonitoreoAyudantiaDto
+            {
+                AyudantiaId = ayudantia.Id,
+                NombreAyudante = ayudantia.Estudiante.Username,
+                Planificacion = ayudantia.Planificacion.Select(p => new ActividadAyudantiaDto
+                {
+                    Id = p.Id,
+                    AyudantiaId = p.AyudantiaId,
+                    Descripcion = p.Descripcion,
+                    FechaPlanificada = p.FechaPlanificada,
+                    Completada = p.Completada
+                }).ToList(),
+                Bitacoras = ayudantia.Bitacoras.Select(b => new BitacoraDto
+                {
+                    Id = b.Id,
+                    Fecha = b.Fecha,
+                    ActividadesRealizadas = b.ActividadesRealizadas,
+                    EvidenciaUrl = b.EvidenciaUrl
+                }).ToList()
+            };
+
+            return Ok(monitoreoDto);
+        }
+
+        [HttpGet("actividades/{actividadId}/entregas")]
+        public async Task<IActionResult> ObtenerEntregasPorActividad(int actividadId)
+        {
+            var actividad = await _context.Actividades.FindAsync(actividadId);
+            if (actividad == null) return NotFound("Actividad no encontrada.");
+
+            var entregas = await _context.EstudianteActividadesRealizadas
+                .Where(e => e.ActividadId == actividadId)
+                .Include(e => e.Estudiante)
+                    .ThenInclude(u => u.Persona)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.EstudianteId,
+                    NombreEstudiante = e.Estudiante.Persona.Nombre + " " + e.Estudiante.Persona.Apellido,
+                    e.ArchivoUrl,
+                    e.FechaRealizada,
+                    e.Completada,
+                    e.Calificacion,
+                    e.Retroalimentacion
+                })
+                .ToListAsync();
+
+            return Ok(entregas);
+        }
+
+        [HttpPost("actividades/calificar")]
+        public async Task<IActionResult> CalificarEntrega([FromBody] CalificarEntregaDto dto)
+        {
+            if (dto == null) return BadRequest("Datos necesarios.");
+
+            var entrega = await _context.EstudianteActividadesRealizadas
+                .FirstOrDefaultAsync(e => e.Id == dto.EntregaId);
+
+            if (entrega == null) return NotFound("Entrega no encontrada.");
+
+            entrega.Calificacion = dto.Calificacion;
+            entrega.Retroalimentacion = dto.Retroalimentacion ?? string.Empty;
+            entrega.Completada = true;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "CalificaciÃ³n registrada correctamente.", entregaId = entrega.Id, calificacion = entrega.Calificacion });
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\EstudianteController.cs ===
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class EstudianteController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+        
+        public EstudianteController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // Propiedad para obtener de forma segura el ID del estudiante autenticado
+        private int? EstudianteId
+        {
+            get
+            {
+                var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                return int.TryParse(value, out var id) ? id : (int?)null;
+            }
+        }
+
+        [HttpPost("ayudantias/postulaciones")]
+        public async Task<IActionResult> PostularAyudantia([FromBody] PostulacionAyudantiaDto postulacionDto)
+        {
+            if (EstudianteId == null) return Unauthorized();
+
+            var existePostulacion = await _context.Ayudantias
+                .AnyAsync(a => a.EstudianteId == EstudianteId.Value && a.CatedraId == postulacionDto.CatedraId);
+
+            if (existePostulacion)
+            {
+                return Conflict(new { message = "Ya te has postulado a esta ayudantÃ­a." });
+            }
+
+            // Verificar inscripciÃ³n y promedio actual
+            var inscripcion = await _context.Inscripciones
+                .FirstOrDefaultAsync(i => i.EstudianteId == EstudianteId.Value && i.CatedraId == postulacionDto.CatedraId);
+
+            if (inscripcion == null)
+            {
+                return Forbid("Debes estar inscrito en la cÃ¡tedra para postular a ayudantÃ­a.");
+            }
+
+            var catedra = await _context.Catedras.FindAsync(postulacionDto.CatedraId);
+            if (catedra != null && catedra.MinimoNota.HasValue && inscripcion.PromedioActual < catedra.MinimoNota.Value)
+            {
+                return Forbid("Tu promedio actual es menor que la nota mÃ­nima para postular a esta ayudantÃ­a.");
+            }
+
+            var ayudantia = new Ayudantia
+            {
+                CatedraId = postulacionDto.CatedraId,
+                EstudianteId = EstudianteId.Value,
+                Estado = "Pendiente"
+            };
+
+            _context.Ayudantias.Add(ayudantia);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "PostulaciÃ³n enviada exitosamente." });
+        }
+
+        [HttpPost("ayudantias/bitacora")]
+        public async Task<IActionResult> RegistrarEnBitacora([FromBody] RegistroBitacoraDto registroDto)
+        {
+            var authResult = await CheckAyudantiaOwnershipAsync(registroDto.AyudantiaId);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
+            var bitacora = new Bitacora
+            {
+                AyudantiaId = registroDto.AyudantiaId,
+                Fecha = DateTime.UtcNow,
+                ActividadesRealizadas = registroDto.ActividadesRealizadas,
+                EvidenciaUrl = registroDto.EvidenciaUrl
+            };
+
+            _context.Bitacoras.Add(bitacora);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "BitÃ¡cora registrada exitosamente." });
+        }
+
+        [HttpPost("ayudantias/informe-mensual")]
+        public async Task<IActionResult> GenerarInformeMensual([FromBody] InformeMensualRequestDto request)
+        {
+            var authResult = await CheckAyudantiaOwnershipAsync(request.AyudantiaId);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
+            var bitacoras = await _context.Bitacoras
+                .Where(b => b.AyudantiaId == request.AyudantiaId && b.Fecha.Month == request.Mes && b.Fecha.Year == request.Anio)
+                .OrderBy(b => b.Fecha)
+                .Select(b => new BitacoraDto
+                {
+                    Id = b.Id,
+                    Fecha = b.Fecha,
+                    ActividadesRealizadas = b.ActividadesRealizadas,
+                    EvidenciaUrl = b.EvidenciaUrl
+                })
+                .ToListAsync();
+
+            // AquÃ­ se podrÃ­a integrar una librerÃ­a para generar un PDF, por ahora devuelvo los datos.
+            return Ok(bitacoras);
+        }
+
+        // Nuevo endpoint para obtener el historial de ayudantÃ­as del estudiante
+        [HttpGet("ayudantias/historial")]
+        public async Task<ActionResult<IEnumerable<HistorialAyudantiaDto>>> GetHistorialAyudantias()
+        {
+            if (EstudianteId == null) return Unauthorized();
+
+            var historial = await _context.Ayudantias
+                .Where(a => a.EstudianteId == EstudianteId.Value)
+                .Include(a => a.Catedra)
+                    .ThenInclude(c => c.Docente)
+                .Select(a => new HistorialAyudantiaDto
+                {
+                    AyudantiaId = a.Id,
+                    EstadoAyudantia = a.Estado,
+                    CatedraId = a.CatedraId,
+                    NombreCatedra = a.Catedra.Nombre,
+                    SemestreCatedra = a.Catedra.Semestre,
+                    DocenteCatedra = a.Catedra.Docente.Persona.Nombre + " " + a.Catedra.Docente.Persona.Apellido
+                })
+                .ToListAsync();
+
+            if (!historial.Any())
+            {
+                return NotFound(new { message = "No se encontrÃ³ historial de ayudantÃ­as para este estudiante." });
+            }
+
+            return Ok(historial);
+        }
+
+        [HttpGet("{id}/validacion-malla")]
+        public async Task<IActionResult> ValidacionMalla(int id, [FromQuery] int? catedraId = null)
+        {
+            var inscripciones = await _context.Inscripciones
+                .Where(i => i.EstudianteId == id)
+                .ToListAsync();
+
+            if (!inscripciones.Any())
+            {
+                return NotFound(new { message = "Estudiante sin inscripciones registradas." });
+            }
+
+            var totalCursos = await _context.Catedras.CountAsync();
+            var cursosAprobados = inscripciones.Count(i => i.PromedioActual >= 60.0);
+            var porcentajeAvance = totalCursos > 0 ? (double)cursosAprobados / totalCursos * 100d : 0d;
+            var promedioGeneral = inscripciones.Average(i => i.PromedioActual);
+            var promedioCurso = catedraId.HasValue
+                ? (double?)inscripciones
+                    .Where(i => i.CatedraId == catedraId.Value)
+                    .Select(i => i.PromedioActual)
+                    .DefaultIfEmpty(0.0)
+                    .Average()
+                : (double?)null;
+
+            return Ok(new
+            {
+                EstudianteId = id,
+                PorcentajeAvanceMalla = Math.Round(porcentajeAvance, 2),
+                CursosAprobados = cursosAprobados,
+                TotalCursos = totalCursos,
+                PromedioGeneral = Math.Round(promedioGeneral, 2),
+                PromedioCurso = promedioCurso.HasValue ? (double?)Math.Round(promedioCurso.Value, 2) : (double?)null,
+                CursoId = catedraId,
+                CumpleMalla = porcentajeAvance >= 50,
+                CumplePromedioGeneral = promedioGeneral >= 60.0,
+                CumplePromedioCurso = !catedraId.HasValue || (promedioCurso.HasValue && promedioCurso.Value >= 60.0)
+            });
+        }
+
+        [HttpPost("actividades/{actividadId}/entregar")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> EntregarActividad(int actividadId, IFormFile archivo)
+        {
+            if (EstudianteId == null) return Unauthorized();
+            if (archivo == null || archivo.Length == 0) return BadRequest("Debe adjuntar un archivo.");
+
+            var actividad = await _context.Actividades.FindAsync(actividadId);
+            if (actividad == null) return NotFound("Actividad no encontrada.");
+
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "entregas", $"actividad-{actividadId}");
+            Directory.CreateDirectory(uploadsFolder);
+
+            var safeName = Path.GetFileName(archivo.FileName);
+            var fileName = $"{Guid.NewGuid():N}_{safeName}";
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await archivo.CopyToAsync(stream);
+            }
+
+            var entrega = await _context.EstudianteActividadesRealizadas
+                .FirstOrDefaultAsync(e => e.EstudianteId == EstudianteId.Value && e.ActividadId == actividadId);
+
+            if (entrega == null)
+            {
+                entrega = new EstudianteActividadRealizada
+                {
+                    EstudianteId = EstudianteId.Value,
+                    ActividadId = actividadId,
+                    FechaRealizada = DateTime.UtcNow,
+                    Completada = true
+                };
+                _context.EstudianteActividadesRealizadas.Add(entrega);
+            }
+            else
+            {
+                entrega.FechaRealizada = DateTime.UtcNow;
+                entrega.Completada = true;
+            }
+
+            entrega.ArchivoUrl = $"/uploads/entregas/actividad-{actividadId}/{fileName}";
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Entrega registrada correctamente.", archivoUrl = entrega.ArchivoUrl });
+        }
+
+        [HttpGet("mis-materias")]
+        public async Task<IActionResult> GetMisMaterias()
+        {
+            if (EstudianteId == null) return Unauthorized();
+
+            var materias = await _context.Inscripciones
+                .Where(i => i.EstudianteId == EstudianteId.Value)
+                .Include(i => i.Catedra)
+                    .ThenInclude(c => c.Docente)
+                        .ThenInclude(d => d.Persona)
+                .Select(i => new
+                {
+                    id = i.Catedra.Id,
+                    codigo = $"CAT-{i.Catedra.Id:D3}",
+                    nombre = i.Catedra.Nombre,
+                    descripcion = $"CÃ¡tedra correspondiente al semestre {i.Catedra.Semestre}",
+                    docente = i.Catedra.Docente != null && i.Catedra.Docente.Persona != null
+                        ? $"{i.Catedra.Docente.Persona.Nombre} {i.Catedra.Docente.Persona.Apellido}"
+                        : "Docente por asignar",
+                    creditos = 4,
+                    semana = 8,
+                    totalSemanas = 16,
+                    semestre = i.Catedra.Semestre,
+                    grupo = "Grupo A"
+                })
+                .ToListAsync();
+
+            return Ok(materias);
+        }
+
+        [HttpPost("ayudantias/{ayudantiaId}/bitacora-multipart")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> RegistrarBitacoraMultipart(int ayudantiaId, [FromForm] RegistrarBitacoraMultipartDto dto)
+        {
+            var authResult = await CheckAyudantiaOwnershipAsync(ayudantiaId);
+            if (authResult != null) return authResult;
+
+            var evidenciaUrl = string.Empty;
+            if (dto.Archivo != null && dto.Archivo.Length > 0)
+            {
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "bitacoras", $"ayudantia-{ayudantiaId}");
+                Directory.CreateDirectory(uploadsFolder);
+                var fileName = $"{Guid.NewGuid():N}_{Path.GetFileName(dto.Archivo.FileName)}";
+                var filePath = Path.Combine(uploadsFolder, fileName);
+
+                await using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await dto.Archivo.CopyToAsync(stream);
+                }
+
+                evidenciaUrl = $"/uploads/bitacoras/ayudantia-{ayudantiaId}/{fileName}";
+            }
+
+            var bitacora = new Bitacora
+            {
+                AyudantiaId = ayudantiaId,
+                Fecha = DateTime.UtcNow,
+                ActividadesRealizadas = dto.ActividadesRealizadas,
+                EvidenciaUrl = evidenciaUrl
+            };
+
+            _context.Bitacoras.Add(bitacora);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "BitÃ¡cora registrada con evidencia adjunta.", evidenciaUrl });
+        }
+
+        private async Task<IActionResult> CheckAyudantiaOwnershipAsync(int ayudantiaId)
+        {
+            if (EstudianteId == null)
+            {
+                return Unauthorized();
+            }
+
+            var isOwner = await _context.Ayudantias
+                .AsNoTracking()
+                .AnyAsync(a => a.Id == ayudantiaId && a.EstudianteId == EstudianteId.Value);
+
+            if (!isOwner)
+            {
+                return Forbid("No tienes permiso para realizar acciones sobre esta ayudantÃ­a.");
+            }
+
+            return null; // Null indica que la validaciÃ³n fue exitosa
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\EstudiantesBulkController.cs ===
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Mail;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+
+namespace back.Controllers
+{
+    [ApiController]
+    [Route("api/estudiantes")]
+    [Authorize]
+    public class EstudiantesBulkController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+        private readonly IConfiguration _config;
+
+        public EstudiantesBulkController(AppDbContext context, IConfiguration config)
+        {
+            _context = context;
+            _config = config;
+        }
+
+        // GET /api/estudiantes/template -> descarga CSV plantilla
+        [HttpGet("template")]
+        public IActionResult DownloadTemplate()
+        {
+            var csv = "nombres,apellidos,cedula,correo\nJordy Fabian,Rivas Bodero,1207751023,jordy@example.com\n";
+            var bytes = Encoding.UTF8.GetBytes(csv);
+            return File(bytes, "text/csv", "estudiantes_plantilla.csv");
+        }
+
+        // GET /api/estudiantes/imports/{jobId}/result -> descarga CSV resultado (solo creador o Administrador)
+        [HttpGet("imports/{jobId}/result")]
+        public async Task<IActionResult> DownloadImportResult(int jobId)
+        {
+            var job = await _context.ImportJobs.Include(j => j.Entries).FirstOrDefaultAsync(j => j.Id == jobId);
+            if (job == null) return NotFound("Import job not found.");
+
+            var callerIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int.TryParse(callerIdStr, out var callerUserId);
+            var callerRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
+
+            if (!string.Equals(callerRole, "Administrador", StringComparison.OrdinalIgnoreCase) && job.CreatedByUserId != callerUserId)
+            {
+                return Forbid("No autorizado para descargar este resultado.");
+            }
+
+            if (string.IsNullOrEmpty(job.ResultFileName)) return NotFound("No hay archivo de resultado disponible.");
+
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", job.ResultFileName.Replace('\\', Path.DirectorySeparatorChar));
+            if (!System.IO.File.Exists(path)) return NotFound("Archivo de resultado no encontrado en el servidor.");
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(path);
+            return File(bytes, "text/csv", Path.GetFileName(path));
+        }
+
+        // POST /api/estudiantes/bulk-upload (multipart/form-data file)
+        // Allowed caller roles: Administrador, Decano, Coordinador, Docente
+        [HttpPost("bulk-upload")]
+        public async Task<ActionResult<BulkUploadResultDto>> BulkUpload(IFormFile file)
+        {
+            var callerRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
+            var allowed = new[] { "Administrador", "Decano", "Coordinador", "Docente" };
+            if (!allowed.Any(r => string.Equals(r, callerRole, StringComparison.OrdinalIgnoreCase)))
+                return Forbid("No autorizado para subir estudiantes en bloque.");
+
+            if (file == null || file.Length == 0) return BadRequest("Archivo requerido.");
+
+            var result = new BulkUploadResultDto();
+
+            try
+            {
+                List<(string Nombres, string Apellidos, string Cedula, string Correo)> rows = new();
+
+                using (var stream = file.OpenReadStream())
+                {
+                    if (file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                    {
+                        using var reader = new StreamReader(stream, Encoding.UTF8);
+                        var header = await reader.ReadLineAsync();
+                        while (!reader.EndOfStream)
+                        {
+                            var line = await reader.ReadLineAsync();
+                            if (string.IsNullOrWhiteSpace(line)) continue;
+                            var parts = line.Split(',');
+                            if (parts.Length < 4) { result.Errors.Add($"LÃ­nea invÃ¡lida: {line}"); continue; }
+                            rows.Add((parts[0].Trim(), parts[1].Trim(), parts[2].Trim(), parts[3].Trim()));
+                        }
+                    }
+                    else // assume Excel (.xlsx)
+                    {
+                        using var workbook = new XLWorkbook(stream);
+                        var ws = workbook.Worksheets.First();
+                        var firstRowUsed = ws.FirstRowUsed().RowNumber();
+                        var lastRow = ws.LastRowUsed().RowNumber();
+
+                        // Assume header in first row; data starts at firstRowUsed+1
+                        for (int r = firstRowUsed + 1; r <= lastRow; r++)
+                        {
+                            var nombres = ws.Cell(r, 1).GetString();
+                            var apellidos = ws.Cell(r, 2).GetString();
+                            var cedula = ws.Cell(r, 3).GetString();
+                            var correo = ws.Cell(r, 4).GetString();
+
+                            if (string.IsNullOrWhiteSpace(nombres) || string.IsNullOrWhiteSpace(apellidos) || string.IsNullOrWhiteSpace(cedula))
+                            {
+                                result.Errors.Add($"Fila {r}: faltan datos obligatorios");
+                                continue;
+                            }
+
+                            rows.Add((nombres.Trim(), apellidos.Trim(), cedula.Trim(), correo?.Trim() ?? string.Empty));
+                        }
+                    }
+                }
+
+                // Validate batch size
+                var maxRows = int.TryParse(_config["BulkUpload:MaxRows"], out var m) ? m : 500;
+                if (rows.Count > maxRows)
+                {
+                    return BadRequest($"El archivo contiene {rows.Count} filas, el mÃ¡ximo permitido es {maxRows}.");
+                }
+
+                // Optional allowed domains (comma separated)
+                var allowedDomainsConfig = _config["BulkUpload:AllowedEmailDomains"] ?? string.Empty;
+                var allowedDomains = allowedDomainsConfig.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(d => d.Trim().ToLowerInvariant()).ToArray();
+
+                // Create ImportJob
+                var callerIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                int.TryParse(callerIdStr, out var callerUserId);
+
+                var importJob = new Entities.ImportJob
+                {
+                    CreatedByUserId = callerUserId,
+                    CreatedAt = DateTime.UtcNow,
+                    FileName = file.FileName
+                };
+
+                _context.ImportJobs.Add(importJob);
+                await _context.SaveChangesAsync(); // get job id
+
+
+                foreach (var row in rows)
+                {
+                    var entry = new Entities.ImportJobEntry
+                    {
+                        ImportJobId = importJob.Id,
+                        Nombres = row.Nombres,
+                        Apellidos = row.Apellidos,
+                        Cedula = row.Cedula,
+                        Correo = row.Correo
+                    };
+
+                    try
+                    {
+                        // Normalize cedula: keep digits only
+                        var cedulaNormalized = new string(row.Cedula.Where(char.IsDigit).ToArray());
+                        if (string.IsNullOrWhiteSpace(cedulaNormalized) || cedulaNormalized.Length < 6)
+                        {
+                            entry.Success = false;
+                            entry.ErrorMessage = "CÃ©dula invÃ¡lida o demasiado corta.";
+                            importJob.Entries.Add(entry);
+                            _context.ImportJobEntries.Add(entry);
+                            await _context.SaveChangesAsync();
+                            continue;
+                        }
+
+                        // Validate correo present
+                        if (string.IsNullOrWhiteSpace(row.Correo))
+                        {
+                            entry.Success = false;
+                            entry.ErrorMessage = "Correo vacÃ­o.";
+                            importJob.Entries.Add(entry);
+                            _context.ImportJobEntries.Add(entry);
+                            await _context.SaveChangesAsync();
+                            continue;
+                        }
+
+                        // Validate correo format
+                        try
+                        {
+                            var maddr = new MailAddress(row.Correo);
+                            var domain = maddr.Host.ToLowerInvariant();
+                            if (allowedDomains.Length > 0 && !allowedDomains.Contains(domain))
+                            {
+                                entry.Success = false;
+                                entry.ErrorMessage = $"Dominio de correo no permitido ({domain}).";
+                                importJob.Entries.Add(entry);
+                                _context.ImportJobEntries.Add(entry);
+                                await _context.SaveChangesAsync();
+                                continue;
+                            }
+                        }
+                        catch
+                        {
+                            entry.Success = false;
+                            entry.ErrorMessage = $"Correo invÃ¡lido ({row.Correo}).";
+                            importJob.Entries.Add(entry);
+                            _context.ImportJobEntries.Add(entry);
+                            await _context.SaveChangesAsync();
+                            continue;
+                        }
+
+                        var usernameBase = GenerateUsername(row.Nombres, row.Apellidos);
+                        var username = await MakeUniqueUsernameAsync(usernameBase);
+
+                        // Password temporary = cedula normalized
+                        var tempPassword = cedulaNormalized;
+
+                        using var hmac = new HMACSHA512();
+                        var user = new User
+                        {
+                            Username = username,
+                            PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(tempPassword)),
+                            PasswordSalt = hmac.Key
+                        };
+
+                        _context.Users.Add(user);
+                        await _context.SaveChangesAsync(); // need Id for persona
+
+                        var persona = new Persona
+                        {
+                            Nombre = row.Nombres,
+                            Apellido = row.Apellidos,
+                            Correo = row.Correo,
+                            Rol = "Estudiante",
+                            UserId = user.Id
+                        };
+
+                        _context.Personas.Add(persona);
+                        await _context.SaveChangesAsync();
+
+                        // Send email if SMTP configured
+                        var emailSent = false;
+                        try
+                        {
+                            var smtpHost = _config["Smtp:Host"];
+                            if (!string.IsNullOrWhiteSpace(smtpHost))
+                            {
+                                var smtpPort = int.TryParse(_config["Smtp:Port"], out var p) ? p : 25;
+                                var smtpUser = _config["Smtp:User"];
+                                var smtpPass = _config["Smtp:Pass"];
+                                var from = _config["Smtp:From"] ?? "no-reply@example.com";
+
+                                using var client = new SmtpClient(smtpHost, smtpPort)
+                                {
+                                    EnableSsl = bool.TryParse(_config["Smtp:EnableSsl"], out var s) && s
+                                };
+
+                                if (!string.IsNullOrEmpty(smtpUser)) client.Credentials = new System.Net.NetworkCredential(smtpUser, smtpPass);
+
+                                var mail = new MailMessage(from, persona.Correo)
+                                {
+                                    Subject = "Cuenta creada - Credenciales",
+                                    Body = $"Hola {persona.Nombre},\n\nSe ha creado tu cuenta.\nUsuario: {username}\nContraseÃ±a temporal: {tempPassword}\nPor favor cambia la contraseÃ±a en tu primer inicio de sesiÃ³n.\n\nSaludos.",
+                                    IsBodyHtml = false
+                                };
+
+                                await client.SendMailAsync(mail);
+                                emailSent = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // don't fail entire process if email fails
+                            entry.ErrorMessage = $"Fallo al enviar email: {ex.Message}";
+                        }
+
+                        entry.Success = true;
+                        entry.Username = username;
+                        importJob.Entries.Add(entry);
+                        _context.ImportJobEntries.Add(entry);
+                        await _context.SaveChangesAsync();
+
+                        result.CreatedCount++;
+                        result.CreatedUsernames.Add(username + (emailSent ? " (email sent)" : " (no email)"));
+                    }
+                    catch (Exception exRow)
+                    {
+                        entry.Success = false;
+                        entry.ErrorMessage = exRow.Message;
+                        importJob.Entries.Add(entry);
+                        _context.ImportJobEntries.Add(entry);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
+                // finalize importJob counts and write CSV results
+                importJob.CreatedCount = importJob.Entries.Count(e => e.Success);
+                importJob.ErrorCount = importJob.Entries.Count(e => !e.Success);
+
+                var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "import-results");
+                if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
+
+                var resultFileName = $"import_{importJob.Id}.csv";
+                var resultPath = Path.Combine(outputDir, resultFileName);
+
+                using (var sw = new StreamWriter(resultPath, false, Encoding.UTF8))
+                {
+                    // headers
+                    sw.WriteLine("nombres,apellidos,cedula,correo,username,success,error");
+                    foreach (var e in importJob.Entries)
+                    {
+                        var line = string.Format("\"{0}\",\"{1}\",\"{2}\",\"{3}\",\"{4}\",{5},\"{6}\"",
+                            e.Nombres?.Replace("\"", "\"\"") ?? string.Empty,
+                            e.Apellidos?.Replace("\"", "\"\"") ?? string.Empty,
+                            e.Cedula?.Replace("\"", "\"\"") ?? string.Empty,
+                            e.Correo?.Replace("\"", "\"\"") ?? string.Empty,
+                            e.Username ?? string.Empty,
+                            e.Success ? "1" : "0",
+                            e.ErrorMessage?.Replace("\"", "\"\"") ?? string.Empty);
+                        sw.WriteLine(line);
+                    }
+                }
+
+                importJob.ResultFileName = Path.Combine("import-results", resultFileName);
+                await _context.SaveChangesAsync();
+
+                result.CreatedCount = importJob.CreatedCount;
+                result.Errors.AddRange(importJob.Entries.Where(e => !e.Success).Select(e => $"{e.Nombres} {e.Apellidos}: {e.ErrorMessage}"));
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error procesando el archivo: {ex.Message}");
+            }
+        }
+
+        private static string GenerateUsername(string nombres, string apellidos)
+        {
+            // Nombres: take first token's first char
+            var nombreParts = nombres.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var apellidoParts = apellidos.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var firstInitial = nombreParts.Length > 0 && !string.IsNullOrEmpty(nombreParts[0]) ? nombreParts[0][0].ToString() : "x";
+            var firstApellido = apellidoParts.Length > 0 ? apellidoParts[0] : "apellido";
+            var secondApellidoInitial = apellidoParts.Length > 1 ? apellidoParts[1][0].ToString() : string.Empty;
+
+            var raw = (firstInitial + firstApellido + secondApellidoInitial).ToLowerInvariant();
+            // Remove spaces and non-alphanumerics
+            var cleaned = new string(raw.Where(c => char.IsLetterOrDigit(c)).ToArray());
+            return cleaned;
+        }
+
+        private async Task<string> MakeUniqueUsernameAsync(string baseUsername)
+        {
+            var username = baseUsername;
+            var i = 1;
+            while (await _context.Users.AnyAsync(u => u.Username == username))
+            {
+                i++;
+                username = baseUsername + i.ToString();
+            }
+
+            return username;
+        }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\JuradoController.cs ===
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+using System;
+
+namespace back.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class JuradoController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public JuradoController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // Crear una presentaciÃ³n asociada a una postulacion/ayudantÃ­a
+        // Solo Coordinador (o Decano) debe crear la instancia que luego los jurados evaluarÃ¡n
+        [HttpPost("presentaciones")]
+        [Authorize(Roles = "Coordinador")]
+        public async Task<IActionResult> CreatePresentacion([FromBody] CreatePresentacionDto dto)
+        {
+            var ayudantia = await _context.Ayudantias.FindAsync(dto.AyudantiaId);
+            if (ayudantia == null) return NotFound("AyudantÃ­a/postulaciÃ³n no encontrada.");
+
+            var juradoIds = dto.JuradoIds?.Any() == true
+                ? dto.JuradoIds.Distinct().ToList()
+                : (dto.ProfesoresAsignados ?? string.Empty)
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(int.Parse)
+                    .Distinct()
+                    .ToList();
+
+            var jurados = await _context.Users
+                .Where(u => juradoIds.Contains(u.Id))
+                .ToListAsync();
+
+            var presentacion = new Presentacion
+            {
+                AyudantiaId = dto.AyudantiaId,
+                Fecha = dto.Fecha,
+                Jurados = jurados,
+                DecanoId = dto.DecanoId,
+                CoordinadorCarreraId = dto.CoordinadorCarreraId
+            };
+
+            _context.Presentaciones.Add(presentacion);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "PresentaciÃ³n creada.", presentacionId = presentacion.Id });
+        }
+
+        // Registrar una evaluaciÃ³n realizada por un jurado (rol Jurado)
+        [HttpPost("presentaciones/{presentacionId}/evaluaciones")]
+        [Authorize(Roles = "Jurado")]
+        public async Task<IActionResult> AddEvaluacion(int presentacionId, [FromBody] CreateEvaluacionDto dto)
+        {
+            var presentacion = await _context.Presentaciones
+                .Include(p => p.Ayudantia)
+                .FirstOrDefaultAsync(p => p.Id == presentacionId);
+            if (presentacion == null) return NotFound("PresentaciÃ³n no encontrada.");
+
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var juradoId))
+            {
+                return Unauthorized("No se pudo identificar al jurado autenticado.");
+            }
+
+            var eval = new PresentacionEvaluacion
+            {
+                PresentacionId = presentacionId,
+                JuradoId = juradoId,
+                Nota = dto.Nota,
+                Observaciones = dto.Observaciones,
+                Fecha = DateTime.UtcNow
+            };
+
+            _context.PresentacionEvaluaciones.Add(eval);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "EvaluaciÃ³n registrada." });
+        }
+
+        // Obtener resultado/comparaciones para la presentaciÃ³n
+        [HttpGet("presentaciones/{presentacionId}/resultado")]
+        [Authorize]
+        public async Task<IActionResult> GetResultado(int presentacionId)
+        {
+            var presentacion = await _context.Presentaciones
+                .Include(p => p.Evaluaciones)
+                .Include(p => p.Ayudantia)
+                .ThenInclude(a => a.Catedra)
+                .FirstOrDefaultAsync(p => p.Id == presentacionId);
+
+            if (presentacion == null) return NotFound("PresentaciÃ³n no encontrada.");
+
+            var evaluaciones = presentacion.Evaluaciones;
+            var promedioEvaluaciones = evaluaciones.Any() ? evaluaciones.Average(e => e.Nota) : 0.0;
+
+            // Promedio del estudiante segÃºn Inscripcion
+            var inscripcion = await _context.Inscripciones
+                .FirstOrDefaultAsync(i => i.EstudianteId == presentacion.Ayudantia.EstudianteId && i.CatedraId == presentacion.Ayudantia.CatedraId);
+
+            var promedioEstudiante = inscripcion?.PromedioActual ?? 0.0;
+
+            // Promedio del semestre (promedio de inscritos en la cÃ¡tedra)
+            var catedraId = presentacion.Ayudantia.CatedraId;
+            var inscritos = _context.Inscripciones.Where(i => i.CatedraId == catedraId);
+            var promedioCatedra = inscritos.Any() ? await inscritos.AverageAsync(i => i.PromedioActual) : 0.0;
+
+            var dto = new PresentacionResultadoDto
+            {
+                PromedioEvaluaciones = Math.Round(promedioEvaluaciones, 2),
+                PromedioEstudiante = Math.Round(promedioEstudiante, 2),
+                PromedioCatedra = Math.Round(promedioCatedra, 2),
+                EstudianteSuperiorPromedioCatedra = promedioEstudiante >= promedioCatedra,
+                EstudianteSuperiorPromedioPresentacion = promedioEstudiante >= promedioEvaluaciones,
+                EvaluacionesCount = evaluaciones.Count
+            };
+
+            return Ok(dto);
+        }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\LoginController.cs ===
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using back.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace back.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class LoginController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+        private readonly ITokenService _tokenService;
+
+        public LoginController(AppDbContext context, ITokenService tokenService)
+        {
+            _context = context;
+            _tokenService = tokenService;
+        }
+
+        [HttpPost("register")]
+        public async Task<ActionResult<UserDto>> Register(RegisterDto registerDto)
+        {
+            if (registerDto == null)
+            {
+                return BadRequest("Datos de registro requeridos.");
+            }
+
+            var requestedRoles = GetRequestedRoles(registerDto.Roles, registerDto.Rol);
+            if (!requestedRoles.Any())
+            {
+                return BadRequest("Debe indicar al menos un rol vÃ¡lido.");
+            }
+
+            if (await UserExists(registerDto.Username))
+            {
+                return BadRequest("Username is already taken");
+            }
+
+            var anyUsers = await _context.Users.AnyAsync();
+            if (!anyUsers)
+            {
+                if (!requestedRoles.Any(r => string.Equals(r, "Administrador", System.StringComparison.OrdinalIgnoreCase)))
+                    return BadRequest("El primer usuario debe ser Administrador.");
+            }
+            else
+            {
+                var callerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(callerId)) return Unauthorized("SÃ³lo usuarios autenticados pueden crear cuentas.");
+
+                var callerRoles = GetRolesFromClaims(User.Claims);
+                var callerRole = callerRoles.FirstOrDefault() ?? string.Empty;
+
+                string[] allowedTargets = callerRole switch
+                {
+                    "Administrador" => new[] { "Decano", "Coordinador", "Docente", "Estudiante" },
+                    "Decano" => new[] { "Coordinador", "Docente", "Estudiante" },
+                    "Coordinador" => new[] { "Docente", "Estudiante" },
+                    "Docente" => new[] { "Estudiante" },
+                    _ => new string[0]
+                };
+
+                var invalidRole = requestedRoles.FirstOrDefault(r => !allowedTargets.Any(a => string.Equals(a, r, System.StringComparison.OrdinalIgnoreCase)));
+                if (invalidRole != null)
+                {
+                    return Forbid($"El rol '{callerRole}' no estÃ¡ autorizado para crear cuentas con rol '{invalidRole}'.");
+                }
+            }
+
+            using var hmac = new HMACSHA512();
+
+            var user = new User
+            {
+                Username = registerDto.Username.ToLower(),
+                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerDto.Password)),
+                PasswordSalt = hmac.Key
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            var persona = new Persona
+            {
+                Nombre = registerDto.Nombre,
+                Apellido = registerDto.Apellido,
+                Correo = registerDto.Correo,
+                UserId = user.Id
+            };
+            persona.SetRoles(requestedRoles);
+
+            _context.Personas.Add(persona);
+            await _context.SaveChangesAsync();
+
+            user.Persona = persona;
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Token = _tokenService.CreateToken(user),
+                Roles = persona.GetRoles(),
+                Rol = persona.Rol,
+                Nombre = persona.Nombre,
+                Apellido = persona.Apellido,
+                Correo = persona.Correo
+            };
+        }
+
+        [HttpPost("login")]
+        public async Task<ActionResult<UserDto>> Login(LoginDto loginDto)
+        {
+            var username = loginDto.Username?.Trim();
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return Unauthorized("Username requerido");
+            }
+
+            var normalizedUsername = username.ToLowerInvariant();
+
+            var user = await _context.Users
+                .Include(u => u.Persona)
+                .SingleOrDefaultAsync(x => x.Username == normalizedUsername);
+
+            if (user == null)
+            {
+                return Unauthorized("Invalid username");
+            }
+
+            using var hmac = new HMACSHA512(user.PasswordSalt);
+            var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDto.Password));
+
+            for (int i = 0; i < computedHash.Length; i++)
+            {
+                if (computedHash[i] != user.PasswordHash[i])
+                {
+                    return Unauthorized("Invalid password");
+                }
+            }
+
+            var roles = user.Persona != null ? user.Persona.GetRoles() : new List<string>();
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Token = _tokenService.CreateToken(user),
+                Roles = roles,
+                Rol = user.Persona?.Rol ?? string.Empty,
+                Nombre = user.Persona?.Nombre,
+                Apellido = user.Persona?.Apellido,
+                Correo = user.Persona?.Correo
+            };
+        }
+
+        private static List<string> GetRequestedRoles(List<string> roles, string legacyRole)
+        {
+            var requested = new List<string>();
+            if (roles != null)
+            {
+                requested.AddRange(roles.Where(r => !string.IsNullOrWhiteSpace(r)));
+            }
+            if (!string.IsNullOrWhiteSpace(legacyRole))
+            {
+                requested.AddRange(legacyRole.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+            return requested
+                .Select(r => r.Trim())
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static List<string> GetRolesFromClaims(IEnumerable<Claim> claims)
+        {
+            return claims
+                .Where(claim => claim.Type == ClaimTypes.Role)
+                .Select(claim => claim.Value)
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private async Task<bool> UserExists(string username)
+        {
+            return await _context.Users.AnyAsync(x => x.Username == username.ToLower());
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\MateriaController.cs ===
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class MateriaController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public MateriaController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // Propiedad para obtener de forma segura el ID del usuario autenticado
+        private int? UserId
+        {
+            get
+            {
+                var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                return int.TryParse(value, out var id) ? id : (int?)null;
+            }
+        }
+
+        // Helper para verificar si el usuario es docente de la materia
+        private async Task<bool> IsDocenteOfMateria(int materiaId)
+        {
+            if (UserId == null) return false;
+
+            var materia = await _context.Catedras.AsNoTracking()
+                                .FirstOrDefaultAsync(m => m.Id == materiaId && m.DocenteId == UserId.Value);
+            return materia != null;
+        }
+
+        // Endpoint para aÃ±adir un recurso a una materia (solo docentes)
+        [HttpPost("{materiaId}/recursos")]
+        public async Task<IActionResult> AddRecurso(int materiaId, [FromBody] CreateRecursoDto createRecursoDto)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede aÃ±adir recursos a esta materia.");
+
+            var materia = await _context.Catedras.FindAsync(materiaId);
+            if (materia == null) return NotFound(new { message = "Materia no encontrada." });
+
+            var recurso = new Recurso
+            {
+                Titulo = createRecursoDto.Titulo,
+                Descripcion = createRecursoDto.Descripcion,
+                Url = createRecursoDto.Url,
+                EsEsencial = createRecursoDto.EsEsencial,
+                MateriaId = materiaId
+            };
+
+            _context.Recursos.Add(recurso);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetRecursosByMateria), new { materiaId = materiaId }, new RecursoDto
+            {
+                Id = recurso.Id,
+                Titulo = recurso.Titulo,
+                Descripcion = recurso.Descripcion,
+                Url = recurso.Url,
+                EsEsencial = recurso.EsEsencial,
+                MateriaId = recurso.MateriaId
+            });
+        }
+
+        // Endpoint para obtener todos los recursos de una materia (todos los usuarios autorizados)
+        [HttpGet("{materiaId}/recursos")]
+        public async Task<ActionResult<IEnumerable<RecursoDto>>> GetRecursosByMateria(int materiaId)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var recursos = await _context.Recursos
+                                .Where(r => r.MateriaId == materiaId)
+                                .Select(r => new RecursoDto
+                                {
+                                    Id = r.Id,
+                                    Titulo = r.Titulo,
+                                    Descripcion = r.Descripcion,
+                                    Url = r.Url,
+                                    EsEsencial = r.EsEsencial,
+                                    MateriaId = r.MateriaId
+                                })
+                                .ToListAsync();
+
+            if (!recursos.Any()) return NotFound(new { message = "No se encontraron recursos para esta materia." });
+
+            return Ok(recursos);
+        }
+
+        // Endpoint para aÃ±adir una actividad a una materia (solo docentes)
+        [HttpPost("{materiaId}/actividades")]
+        public async Task<IActionResult> AddActividad(int materiaId, [FromBody] CreateActividadDto createActividadDto)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede aÃ±adir actividades a esta materia.");
+
+            var materia = await _context.Catedras.FindAsync(materiaId);
+            if (materia == null) return NotFound(new { message = "Materia no encontrada." });
+
+            var actividad = new Actividad
+            {
+                Titulo = createActividadDto.Titulo,
+                Descripcion = createActividadDto.Descripcion,
+                FechaEntrega = createActividadDto.FechaEntrega,
+                Tipo = createActividadDto.Tipo,
+                Estado = "Pendiente", // Estado inicial por defecto
+                MateriaId = materiaId
+            };
+
+            _context.Actividades.Add(actividad);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetActividadesByMateria), new { materiaId = materiaId }, new ActividadDto
+            {
+                Id = actividad.Id,
+                Titulo = actividad.Titulo,
+                Descripcion = actividad.Descripcion,
+                FechaEntrega = actividad.FechaEntrega,
+                Tipo = actividad.Tipo,
+                Estado = actividad.Estado,
+                MateriaId = actividad.MateriaId
+            });
+        }
+
+        // Endpoint para obtener todas las actividades de una materia (todos los usuarios autorizados)
+        [HttpGet("{materiaId}/actividades")]
+        public async Task<ActionResult<IEnumerable<ActividadDto>>> GetActividadesByMateria(int materiaId)
+        {
+            if (UserId == null) return Unauthorized();
+
+            var actividades = await _context.Actividades
+                                .Where(a => a.MateriaId == materiaId)
+                                .Select(a => new ActividadDto
+                                {
+                                    Id = a.Id,
+                                    Titulo = a.Titulo,
+                                    Descripcion = a.Descripcion,
+                                    FechaEntrega = a.FechaEntrega,
+                                    Tipo = a.Tipo,
+                                    Estado = a.Estado,
+                                    MateriaId = a.MateriaId
+                                })
+                                .ToListAsync();
+
+            if (!actividades.Any()) return NotFound(new { message = "No se encontraron actividades para esta materia." });
+
+            return Ok(actividades);
+        }
+
+        // Nuevo endpoint para que un estudiante marque un recurso como visto
+        [HttpPost("recursos/marcar-visto")]
+        public async Task<IActionResult> MarkRecursoAsSeen([FromBody] MarkRecursoAsSeenDto markRecursoAsSeenDto)
+        {
+            if (UserId == null) return Unauthorized();
+
+            // Verificar que el recurso existe
+            var recurso = await _context.Recursos.FindAsync(markRecursoAsSeenDto.RecursoId);
+            if (recurso == null) return NotFound(new { message = "Recurso no encontrado." });
+
+            // Verificar si el estudiante estÃ¡ inscrito en la materia del recurso
+            var isStudentInMateria = await _context.Inscripciones
+                                        .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == recurso.MateriaId);
+            if (!isStudentInMateria)
+            {
+                return Forbid("No tienes permiso para marcar este recurso como visto, ya que no estÃ¡s inscrito en la materia.");
+            }
+
+            // Verificar si ya estÃ¡ marcado como visto
+            var existingEntry = await _context.RecursosVistosPorEstudiante
+                                            .FirstOrDefaultAsync(rv => rv.RecursoId == markRecursoAsSeenDto.RecursoId && rv.EstudianteId == UserId.Value);
+
+            if (existingEntry != null)
+            {
+                return Conflict(new { message = "Este recurso ya ha sido marcado como visto por este estudiante." });
+            }
+
+            var recursoVisto = new RecursoVistoPorEstudiante
+            {
+                RecursoId = markRecursoAsSeenDto.RecursoId,
+                EstudianteId = UserId.Value,
+                FechaVisto = DateTime.UtcNow
+            };
+
+            _context.RecursosVistosPorEstudiante.Add(recursoVisto);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Recurso marcado como visto exitosamente." });
+        }
+
+        // Nuevo endpoint para obtener el estado de los recursos de una materia (visto/no visto por el estudiante)
+        [HttpGet("{materiaId}/recursos/estado")]
+        public async Task<ActionResult<IEnumerable<RecursoConEstadoDto>>> GetRecursosConEstadoByMateria(int materiaId)
+        {
+            if (UserId == null) return Unauthorized();
+
+            // Verificar si el estudiante estÃ¡ inscrito en la materia
+            var isStudentInMateria = await _context.Inscripciones
+                                        .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == materiaId);
+            if (!isStudentInMateria)
+            {
+                return Forbid("No tienes permiso para ver el estado de los recursos de esta materia.");
+            }
+
+            var recursos = await _context.Recursos
+                                .Where(r => r.MateriaId == materiaId)
+                                .Select(r => new RecursoConEstadoDto
+                                {
+                                    Id = r.Id,
+                                    Titulo = r.Titulo,
+                                    Descripcion = r.Descripcion,
+                                    Url = r.Url,
+                                    EsEsencial = r.EsEsencial,
+                                    MateriaId = r.MateriaId,
+                                    Visto = _context.RecursosVistosPorEstudiante
+                                                    .Any(rv => rv.RecursoId == r.Id && rv.EstudianteId == UserId.Value)
+                                })
+                                .ToListAsync();
+
+            if (!recursos.Any()) return NotFound(new { message = "No se encontraron recursos para esta materia." });
+
+            return Ok(recursos);
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\PersonaController.cs ===
+using back.Data;
+using back.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace back.Controllers
+{
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class PersonaController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public PersonaController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetPersona()
+        {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var persona = await _context.Personas
+                .Where(p => p.UserId == userId)
+                .Select(p => new PersonaDto
+                {
+                    Nombre = p.Nombre,
+                    Apellido = p.Apellido,
+                    Correo = p.Correo
+                })
+                .FirstOrDefaultAsync();
+
+            if (persona == null) return NotFound("Datos personales no encontrados.");
+
+            return Ok(persona);
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> UpdatePersona([FromBody] PersonaDto personaDto)
+        {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var persona = await _context.Personas.FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (persona == null) return NotFound("Datos personales no encontrados.");
+
+            persona.Nombre = personaDto.Nombre;
+            persona.Apellido = personaDto.Apellido;
+            persona.Correo = personaDto.Correo;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Datos personales actualizados correctamente." });
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Controllers\RolesController.cs ===
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+using back.Data;
+using back.DTOs;
+using back.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace back.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class RolesController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+        public RolesController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // PUT /api/roles/{userId} -> asigna/actualiza el rol de un usuario
+        // Reglas:
+        // - Solo usuarios autenticados pueden llamar
+        // - Solo Administrador puede asignar el rol "Administrador"
+        // - AdemÃ¡s se valida que el rol objetivo estÃ© dentro de los permitidos para el rol del llamador
+        [HttpPut("{userId}")]
+        public async Task<IActionResult> SetUserRole(int userId, [FromBody] SetUserRoleDto dto)
+        {
+            if (dto == null) return BadRequest("Datos requeridos.");
+
+            var requestedRoles = dto.Roles?.Any() == true ? dto.Roles : new List<string> { dto.Rol };
+            requestedRoles = requestedRoles
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!requestedRoles.Any()) return BadRequest("Rol requerido.");
+
+            var callerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var callerRoles = User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var callerRole = callerRoles.FirstOrDefault() ?? string.Empty;
+            if (string.IsNullOrEmpty(callerId)) return Unauthorized();
+
+            if (requestedRoles.Any(r => string.Equals(r, "Administrador", StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(callerRole, "Administrador", StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid("Solo Administrador puede asignar el rol Administrador.");
+            }
+
+            string[] allowedTargets = callerRole switch
+            {
+                "Administrador" => new[] { "Administrador", "Decano", "Coordinador", "Docente", "Estudiante" },
+                "Decano" => new[] { "Coordinador", "Docente", "Estudiante" },
+                "Coordinador" => new[] { "Docente", "Estudiante" },
+                "Docente" => new[] { "Estudiante" },
+                _ => Array.Empty<string>()
+            };
+
+            var invalidRole = requestedRoles.FirstOrDefault(r => !allowedTargets.Any(a => string.Equals(a, r, StringComparison.OrdinalIgnoreCase)));
+            if (invalidRole != null)
+            {
+                return Forbid($"El rol '{callerRole}' no estÃ¡ autorizado para asignar el rol '{invalidRole}'.");
+            }
+
+            var user = await _context.Users.Include(u => u.Persona).FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return NotFound("Usuario no encontrado.");
+
+            if (user.Persona == null)
+            {
+                return BadRequest("El usuario no tiene una entidad Persona asociada; no se puede asignar rol.");
+            }
+
+            user.Persona.SetRoles(requestedRoles);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"Roles del usuario {userId} actualizados: {string.Join(", ", requestedRoles)}." });
+        }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\ActividadAyudantiaDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class ActividadAyudantiaDto
+    {
+        public int Id { get; set; }
+        public int AyudantiaId { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaPlanificada { get; set; }
+        public bool Completada { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\ActividadDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class ActividadDto
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaEntrega { get; set; }
+        public string Tipo { get; set; }
+        public string Estado { get; set; }
+        public int MateriaId { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\AlertaTempranaDto.cs ===
+namespace back.DTOs
+{
+    public class AlertaTempranaDto
+    {
+        public int EstudianteId { get; set; }
+        public string NombreEstudiante { get; set; }
+        public double PromedioActual { get; set; }
+        public bool AlertaActiva { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\AsignacionAyudantiaDto.cs ===
+namespace back.DTOs
+{
+    public class AsignacionAyudantiaDto
+    {
+        public int AyudantiaId { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\AsistenciaDto.cs ===
+namespace back.DTOs
+{
+    public class AsistenciaDto
+    {
+        public int Id { get; set; }
+        public int ClaseSesionId { get; set; }
+        public int EstudianteId { get; set; }
+        public bool Presente { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\BulkUploadResultDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class BulkUploadResultDto
+    {
+        public int CreatedCount { get; set; }
+        public List<string> CreatedUsernames { get; set; } = new List<string>();
+        public List<string> Errors { get; set; } = new List<string>();
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CalificarEntregaDto.cs ===
+namespace back.DTOs
+{
+    public class CalificarEntregaDto
+    {
+        public int EntregaId { get; set; }
+        public decimal Calificacion { get; set; }
+        public string Retroalimentacion { get; set; } = string.Empty;
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\ClaseDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class ClaseDto
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public int MateriaId { get; set; }
+        public int DocenteId { get; set; }
+        public ICollection<int> EstudianteIds { get; set; } // Solo IDs de estudiantes
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\ClaseSesionDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class ClaseSesionDto
+    {
+        public int Id { get; set; }
+        public int MateriaId { get; set; }
+        public int? ClaseId { get; set; }
+        public int DocenteId { get; set; }
+        public DateTime Fecha { get; set; }
+        public TimeSpan HoraInicio { get; set; }
+        public TimeSpan HoraFin { get; set; }
+        public string TipoClase { get; set; }
+        public string LinkVirtual { get; set; }
+        public string AplicacionVirtual { get; set; }
+        public string EdificioPresencial { get; set; }
+        public string AulaPresencial { get; set; }
+        public string PisoPresencial { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreateActividadDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class CreateActividadDto
+    {
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaEntrega { get; set; }
+        public string Tipo { get; set; }
+        // El estado inicial podrÃ­a ser "Pendiente" por defecto en el controlador
+        public int MateriaId { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreateAsistenciaDto.cs ===
+namespace back.DTOs
+{
+    public class CreateAsistenciaDto
+    {
+        public int ClaseSesionId { get; set; }
+        public int EstudianteId { get; set; }
+        public bool Presente { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreateClaseDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class CreateClaseDto
+    {
+        public string Nombre { get; set; }
+        public int MateriaId { get; set; }
+        public int DocenteId { get; set; }
+        public ICollection<int> EstudianteIds { get; set; } // IDs de estudiantes a asignar a la clase
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreateClaseSesionDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class CreateClaseSesionDto
+    {
+        public int MateriaId { get; set; }
+        public int? ClaseId { get; set; } // Opcional, si la sesiÃ³n pertenece a una instancia de Clase especÃ­fica
+        public int DocenteId { get; set; }
+        public DateTime Fecha { get; set; }
+        public TimeSpan HoraInicio { get; set; }
+        public TimeSpan HoraFin { get; set; }
+        public string TipoClase { get; set; } // "Virtual", "Presencial"
+        public string LinkVirtual { get; set; }
+        public string AplicacionVirtual { get; set; }
+        public string EdificioPresencial { get; set; }
+        public string AulaPresencial { get; set; }
+        public string PisoPresencial { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreateEvaluacionDto.cs ===
+namespace back.DTOs
+{
+    public class CreateEvaluacionDto
+    {
+        public double Nota { get; set; }
+        public string Observaciones { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreatePresentacionDto.cs ===
+using System;
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class CreatePresentacionDto
+    {
+        public int AyudantiaId { get; set; }
+        public DateTime Fecha { get; set; }
+        public string ProfesoresAsignados { get; set; } = string.Empty;
+        public List<int> JuradoIds { get; set; } = new();
+        public int? DecanoId { get; set; }
+        public int? CoordinadorCarreraId { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CreateRecursoDto.cs ===
+namespace back.DTOs
+{
+    public class CreateRecursoDto
+    {
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public string Url { get; set; }
+        public bool EsEsencial { get; set; }
+        public int MateriaId { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\CronogramaActividadDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class CronogramaActividadDto
+    {
+        public int Id { get; set; }
+        public int CatedraId { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaPrevista { get; set; }
+        public DateTime? FechaReal { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\EntregarActividadDto.cs ===
+namespace back.DTOs
+{
+    public class EntregarActividadDto
+    {
+        public IFormFile Archivo { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\EvaluacionDto.cs ===
+namespace back.DTOs
+{
+    public class EvaluacionDto
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public int CatedraId { get; set; }
+        public bool EsDiagnostica { get; set; }
+        public bool AdaptadaConIA { get; set; }
+        public string DescripcionIA { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\ExpedienteDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class ExpedienteDto
+    {
+        public int EstudianteId { get; set; }
+        public string NombreEstudiante { get; set; }
+        public List<HistorialAcademicoDto> Historial { get; set; } = new List<HistorialAcademicoDto>();
+        public List<IndicadorCualitativoDto> Indicadores { get; set; } = new List<IndicadorCualitativoDto>();
+    }
+
+    public class HistorialAcademicoDto
+    {
+        public string NombreCatedra { get; set; }
+        public double CalificacionFinal { get; set; }
+        public string Periodo { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\GestionEstadoAyudantiaDto.cs ===
+namespace back.DTOs
+{
+    public class GestionEstadoAyudantiaDto
+    {
+        public string NuevoEstado { get; set; } // Ej: "Finalizada", "Cancelada"
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\HistorialAyudantiaDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class HistorialAyudantiaDto
+    {
+        public int AyudantiaId { get; set; }
+        public string EstadoAyudantia { get; set; }
+        public int CatedraId { get; set; }
+        public string NombreCatedra { get; set; }
+        public string SemestreCatedra { get; set; } // Nuevo campo
+        public string DocenteCatedra { get; set; } // Nombre del docente
+        // PodrÃ­amos aÃ±adir mÃ¡s detalles si es necesario, como un resumen de bitÃ¡coras, etc.
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\IndicadorCualitativoDto.cs ===
+using System;
+
+namespace back.DTOs
+{
+    public class IndicadorCualitativoDto
+    {
+        public int Id { get; set; }
+        public int EstudianteId { get; set; }
+        public int CatedraId { get; set; }
+        public string Indicador { get; set; }
+        public string Observacion { get; set; }
+        public DateTime Fecha { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\InformeMensualRequestDto.cs ===
+namespace back.DTOs
+{
+    public class InformeMensualRequestDto
+    {
+        public int AyudantiaId { get; set; }
+        public int Mes { get; set; }
+        public int Anio { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\LoginDto.cs ===
+using System.ComponentModel.DataAnnotations;
+
+namespace back.DTOs
+{
+    public class LoginDto
+    {
+        [Required]
+        public string Username { get; set; }
+
+        [Required]
+        public string Password { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\MarkRecursoAsSeenDto.cs ===
+namespace back.DTOs
+{
+    public class MarkRecursoAsSeenDto
+    {
+        public int RecursoId { get; set; }
+        // The EstudianteId will be taken from the authenticated user
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\MateriaDto.cs ===
+namespace back.DTOs
+{
+    public class MateriaDto
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public string Descripcion { get; set; }
+        public string Codigo { get; set; }
+        public int DocenteResponsableId { get; set; }
+
+        // Opcional: si necesitas mostrar datos del docente
+        public string NombreDocenteResponsable { get; set; }
+
+        // Opcional: si necesitas incluir recursos o actividades
+        public List<RecursoDto> Recursos { get; set; }
+        public List<ActividadDto> Actividades { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\MonitoreoAyudantiaDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class MonitoreoAyudantiaDto
+    {
+        public int AyudantiaId { get; set; }
+        public string NombreAyudante { get; set; }
+        public List<ActividadAyudantiaDto> Planificacion { get; set; } = new List<ActividadAyudantiaDto>();
+        public List<BitacoraDto> Bitacoras { get; set; } = new List<BitacoraDto>();
+    }
+
+    public class BitacoraDto
+    {
+        public int Id { get; set; }
+        public DateTime Fecha { get; set; }
+        public string ActividadesRealizadas { get; set; }
+        public string EvidenciaUrl { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\PersonaDto.cs ===
+namespace back.DTOs
+{
+    public class PersonaDto
+    {
+        public string Nombre { get; set; }
+        public string Apellido { get; set; }
+        public string Correo { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\PostulacionAyudantiaDto.cs ===
+namespace back.DTOs
+{
+    public class PostulacionAyudantiaDto
+    {
+        public int CatedraId { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\PresentacionResultadoDto.cs ===
+namespace back.DTOs
+{
+    public class PresentacionResultadoDto
+    {
+        public double PromedioEvaluaciones { get; set; }
+        public double PromedioEstudiante { get; set; }
+        public double PromedioCatedra { get; set; }
+        public bool EstudianteSuperiorPromedioCatedra { get; set; }
+        public bool EstudianteSuperiorPromedioPresentacion { get; set; }
+        public int EvaluacionesCount { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\RecursoConEstadoDto.cs ===
+namespace back.DTOs
+{
+    public class RecursoConEstadoDto
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public string Url { get; set; }
+        public bool EsEsencial { get; set; }
+        public int MateriaId { get; set; }
+        public bool Visto { get; set; } // Indica si el recurso ha sido visto por el estudiante
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\RecursoDto.cs ===
+namespace back.DTOs
+{
+    public class RecursoDto
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public string Url { get; set; }
+        public bool EsEsencial { get; set; }
+        public int MateriaId { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\RegisterDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class RegisterDto
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
+        public string Nombre { get; set; }
+        public string Apellido { get; set; }
+        public string Correo { get; set; }
+        public List<string> Roles { get; set; } = new();
+        public string Rol { get; set; } = string.Empty; // Legacy compatibility
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\RegistrarBitacoraMultipartDto.cs ===
+namespace back.DTOs
+{
+    public class RegistrarBitacoraMultipartDto
+    {
+        public string ActividadesRealizadas { get; set; }
+        public IFormFile Archivo { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\RegistroBitacoraDto.cs ===
+namespace back.DTOs
+{
+    public class RegistroBitacoraDto
+    {
+        public int AyudantiaId { get; set; }
+        public string ActividadesRealizadas { get; set; }
+        public string EvidenciaUrl { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\SetMinimoNotaDto.cs ===
+namespace back.DTOs
+{
+    public class SetMinimoNotaDto
+    {
+        public double MinimoNota { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\SetUserRoleDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class SetUserRoleDto
+    {
+        public List<string> Roles { get; set; } = new();
+        public string Rol { get; set; } = string.Empty; // Legacy compatibility
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\SolicitudAyudantiaDto.cs ===
+namespace back.DTOs
+{
+    public class SolicitudAyudantiaDto
+    {
+        public int AyudantiaId { get; set; }
+        public int EstudianteId { get; set; }
+        public string NombreEstudiante { get; set; }
+        public int CatedraId { get; set; }
+        public string NombreCatedra { get; set; }
+        public string Estado { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\DTOs\UserDto.cs ===
+using System.Collections.Generic;
+
+namespace back.DTOs
+{
+    public class UserDto
+    {
+        public int Id { get; set; }
+        public string Username { get; set; }
+        public string Token { get; set; }
+        public List<string> Roles { get; set; } = new();
+        public string Rol { get; set; } = string.Empty; // Legacy compatibility
+        public string Nombre { get; set; }
+        public string Apellido { get; set; }
+        public string Correo { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Actividad.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class Actividad
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaEntrega { get; set; }
+        public string Tipo { get; set; } // e.g., "Tarea", "Examen", "Proyecto"
+        public string Estado { get; set; } // e.g., "Pendiente", "Completada", "Vencida"
+        public int MateriaId { get; set; }
+
+        // Navigation property
+        public Materia Materia { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\ActividadAyudantia.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class ActividadAyudantia
+    {
+        public int Id { get; set; }
+        public int AyudantiaId { get; set; }
+        public Ayudantia Ayudantia { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaPlanificada { get; set; }
+        public bool Completada { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Asistencia.cs ===
+namespace back.Entities
+{
+    public class Asistencia
+    {
+        public int Id { get; set; }
+        public int ClaseSesionId { get; set; }
+        public int EstudianteId { get; set; } // FK to User (Estudiante)
+        public bool Presente { get; set; }
+
+        // Navigation properties
+        public ClaseSesion ClaseSesion { get; set; }
+        public User Estudiante { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Ayudantia.cs ===
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class Ayudantia
+    {
+        public int Id { get; set; }
+        public int CatedraId { get; set; }
+        public Catedra Catedra { get; set; }
+        public int EstudianteId { get; set; } // Ayudante
+        public User Estudiante { get; set; }
+        public string Estado { get; set; } // Ej: "Activa", "Finalizada", "Pendiente"
+
+        public ICollection<ActividadAyudantia> Planificacion { get; set; } = new List<ActividadAyudantia>();
+        public ICollection<Bitacora> Bitacoras { get; set; } = new List<Bitacora>();
+
+        // Presentaciones pÃºblicas/privadas que han ocurrido para esta postulacion/ayudantÃ­a
+        public ICollection<Presentacion> Presentaciones { get; set; } = new List<Presentacion>();
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Bitacora.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class Bitacora
+    {
+        public int Id { get; set; }
+        public int AyudantiaId { get; set; }
+        public Ayudantia Ayudantia { get; set; }
+        public DateTime Fecha { get; set; }
+        public string ActividadesRealizadas { get; set; }
+        public string EvidenciaUrl { get; set; } // Opcional: enlace a un archivo
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Catedra.cs ===
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class Catedra
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public string Semestre { get; set; } // AÃ±adido: e.g., "2023-1", "2023-2"
+        public int DocenteId { get; set; }
+        public User Docente { get; set; }
+        public ICollection<Inscripcion> Inscripciones { get; set; } = new List<Inscripcion>();
+        public ICollection<Evaluacion> Evaluaciones { get; set; } = new List<Evaluacion>();
+
+        // Nota mÃ­nima requerida para postulaciones/aceptaciÃ³n. Null = sin restricciÃ³n
+        public double? MinimoNota { get; set; }
+
+        // Propiedad aÃ±adida para la relaciÃ³n con Ayudantia
+        public ICollection<Ayudantia> Ayudantias { get; set; } = new List<Ayudantia>();
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Clase.cs ===
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class Clase
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } // e.g., "Modelamiento 2023-2"
+        public int MateriaId { get; set; }
+        public int DocenteId { get; set; } // El docente especÃ­fico a cargo de esta instancia de clase
+
+        // Navigation properties
+        public Materia Materia { get; set; }
+        public User Docente { get; set; }
+
+        // RelaciÃ³n muchos a muchos con estudiantes
+        public ICollection<User> Estudiantes { get; set; } = new List<User>();
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\ClaseSesion.cs ===
+using System;
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class ClaseSesion
+    {
+        public int Id { get; set; }
+        public int MateriaId { get; set; } // The general Materia
+        public int? ClaseId { get; set; } // Specific instance of a class (e.g., "Modelamiento 2023-2")
+        public int DocenteId { get; set; } // FK to User (Docente)
+        public DateTime Fecha { get; set; }
+        public TimeSpan HoraInicio { get; set; }
+        public TimeSpan HoraFin { get; set; }
+        public string TipoClase { get; set; } // "Virtual", "Presencial"
+        public string LinkVirtual { get; set; }
+        public string AplicacionVirtual { get; set; } // e.g., "Zoom", "Meet"
+        public string EdificioPresencial { get; set; }
+        public string AulaPresencial { get; set; }
+        public string PisoPresencial { get; set; }
+
+        // Navigation properties
+        public Materia Materia { get; set; }
+        public Clase Clase { get; set; }
+        public User Docente { get; set; }
+        public ICollection<Asistencia> Asistencias { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\CronogramaActividad.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class CronogramaActividad
+    {
+        public int Id { get; set; }
+        public int CatedraId { get; set; }
+        public Catedra Catedra { get; set; }
+        public string Descripcion { get; set; }
+        public DateTime FechaPrevista { get; set; }
+        public DateTime? FechaReal { get; set; } // Para reprogramaciones
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\EstudianteActividadRealizada.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class EstudianteActividadRealizada
+    {
+        public int Id { get; set; }
+        public int EstudianteId { get; set; }
+        public int ActividadId { get; set; }
+        public DateTime? FechaRealizada { get; set; }
+        public bool Completada { get; set; }
+        public string ArchivoUrl { get; set; } = string.Empty;
+        public decimal? Calificacion { get; set; }
+        public string Retroalimentacion { get; set; } = string.Empty;
+
+        public User Estudiante { get; set; }
+        public Actividad Actividad { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\EstudianteRecursoVisto.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class EstudianteRecursoVisto
+    {
+        public int EstudianteId { get; set; }
+        public int RecursoId { get; set; }
+        public DateTime FechaVisto { get; set; }
+
+        // Navigation properties
+        public User Estudiante { get; set; } // Assuming User entity represents Estudiante
+        public Recurso Recurso { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Evaluacion.cs ===
+namespace back.Entities
+{
+    public class Evaluacion
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public int CatedraId { get; set; }
+        public Catedra Catedra { get; set; }
+        public bool EsDiagnostica { get; set; } // Para RF-005
+        public bool AdaptadaConIA { get; set; } // Para RF-003
+        public string DescripcionIA { get; set; } // Para RF-003
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\ImportJob.cs ===
+using System;
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class ImportJob
+    {
+        public int Id { get; set; }
+        public int CreatedByUserId { get; set; }
+        public User CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string FileName { get; set; }
+        public int CreatedCount { get; set; }
+        public int ErrorCount { get; set; }
+        public string ResultFileName { get; set; }
+
+        public ICollection<ImportJobEntry> Entries { get; set; } = new List<ImportJobEntry>();
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\ImportJobEntry.cs ===
+namespace back.Entities
+{
+    public class ImportJobEntry
+    {
+        public int Id { get; set; }
+        public int ImportJobId { get; set; }
+        public ImportJob ImportJob { get; set; }
+
+        public string Nombres { get; set; }
+        public string Apellidos { get; set; }
+        public string Cedula { get; set; }
+        public string Correo { get; set; }
+
+        public string Username { get; set; }
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\IndicadorCualitativo.cs ===
+namespace back.Entities
+{
+    public class IndicadorCualitativo
+    {
+        public int Id { get; set; }
+        public int EstudianteId { get; set; }
+        public User Estudiante { get; set; }
+        public int CatedraId { get; set; }
+        public Catedra Catedra { get; set; }
+        public string Indicador { get; set; } // "InterÃ©s", "ParticipaciÃ³n", "DesempeÃ±o"
+        public string Observacion { get; set; }
+        public System.DateTime Fecha { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Inscripcion.cs ===
+namespace back.Entities
+{
+    public class Inscripcion
+    {
+        public int Id { get; set; }
+        public int EstudianteId { get; set; }
+        public User Estudiante { get; set; }
+        public int CatedraId { get; set; }
+        public Catedra Catedra { get; set; }
+
+        // Para RF-001: Alertas Tempranas. Un promedio bajo podrÃ­a generar una alerta.
+        public double PromedioActual { get; set; }
+        public bool AlertaRendimiento { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Materia.cs ===
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class Materia
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public string Descripcion { get; set; }
+        public string Codigo { get; set; } // e.g., "MSI301"
+        public int DocenteResponsableId { get; set; } // FK to User (Docente)
+
+        // Navigation properties
+        public User DocenteResponsable { get; set; }
+        public ICollection<Recurso> Recursos { get; set; }
+        public ICollection<Actividad> Actividades { get; set; }
+        public ICollection<Clase> Clases { get; set; } // Instances of this Materia
+        public ICollection<ClaseSesion> ClasesSesiones { get; set; } // All sessions for this materia
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Persona.cs ===
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+
+namespace back.Entities
+{
+    public class Persona
+    {
+        public int Id { get; set; }
+        [Required]
+        public string Nombre { get; set; }
+        [Required]
+        public string Apellido { get; set; }
+        [Required]
+        public string Correo { get; set; }
+
+        // Legacy / normalized storage for roles. Use comma-separated values to support multiple roles.
+        [Required]
+        public string Rol { get; set; } = string.Empty;
+
+        public List<string> GetRoles()
+        {
+            if (string.IsNullOrWhiteSpace(Rol)) return new List<string>();
+            return Rol
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(r => r.Trim())
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public void SetRoles(IEnumerable<string> roles)
+        {
+            var normalized = (roles ?? Enumerable.Empty<string>())
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Rol = normalized.Count == 0 ? string.Empty : string.Join(",", normalized);
+        }
+
+        // RelaciÃ³n uno a uno con User
+        public int UserId { get; set; }
+        public User User { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Presentacion.cs ===
+using System;
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class Presentacion
+    {
+        public int Id { get; set; }
+        public int AyudantiaId { get; set; }
+        public Ayudantia Ayudantia { get; set; }
+        public DateTime Fecha { get; set; }
+
+        public ICollection<User> Jurados { get; set; } = new List<User>();
+
+        public int? DecanoId { get; set; }
+        public User Decano { get; set; }
+
+        public int? CoordinadorCarreraId { get; set; }
+        public User CoordinadorCarrera { get; set; }
+
+        public ICollection<PresentacionEvaluacion> Evaluaciones { get; set; } = new List<PresentacionEvaluacion>();
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\PresentacionEvaluacion.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class PresentacionEvaluacion
+    {
+        public int Id { get; set; }
+        public int PresentacionId { get; set; }
+        public Presentacion Presentacion { get; set; }
+
+        // Jurado (User) que realizÃ³ la evaluaciÃ³n
+        public int JuradoId { get; set; }
+        public User Jurado { get; set; }
+
+        public double Nota { get; set; }
+        public string Observaciones { get; set; }
+        public DateTime Fecha { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\Recurso.cs ===
+namespace back.Entities
+{
+    public class Recurso
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; }
+        public string Descripcion { get; set; }
+        public string Url { get; set; } // URL al archivo o enlace externo
+        public bool EsEsencial { get; set; } // Para la barra lateral
+        public int MateriaId { get; set; }
+
+        // Navigation property
+        public Materia Materia { get; set; }
+    }
+}
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\RecursoVistoPorEstudiante.cs ===
+using System;
+
+namespace back.Entities
+{
+    public class RecursoVistoPorEstudiante
+    {
+        public int Id { get; set; }
+        public int RecursoId { get; set; }
+        public int EstudianteId { get; set; } // FK to User (Estudiante)
+        public DateTime FechaVisto { get; set; }
+
+        // Navigation properties
+        public Recurso Recurso { get; set; }
+        public User Estudiante { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Entities\User.cs ===
+using System.Collections.Generic;
+
+namespace back.Entities
+{
+    public class User
+    {
+        public int Id { get; set; }
+        public string Username { get; set; }
+        public byte[] PasswordHash { get; set; }
+        public byte[] PasswordSalt { get; set; }
+
+        // Propiedad de navegaciÃ³n a Persona
+        public Persona Persona { get; set; }
+
+        // Colecciones para las relaciones
+        public ICollection<Inscripcion> Inscripciones { get; set; } = new List<Inscripcion>();
+        public ICollection<Catedra> CatedrasDocente { get; set; } = new List<Catedra>();
+        public ICollection<Ayudantia> AyudantiasEstudiante { get; set; } = new List<Ayudantia>();
+        public ICollection<ClaseSesion> ClasesSesionesDocente { get; set; } = new List<ClaseSesion>();
+        public ICollection<Asistencia> AsistenciasEstudiante { get; set; } = new List<Asistencia>();
+        public ICollection<Clase> ClasesDocente { get; set; } = new List<Clase>();
+        public ICollection<Clase> ClasesEstudiante { get; set; } = new List<Clase>();
+        public ICollection<RecursoVistoPorEstudiante> RecursosVistos { get; set; } = new List<RecursoVistoPorEstudiante>();
+        public ICollection<Presentacion> PresentacionesJurado { get; set; } = new List<Presentacion>();
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Exceptions\ApiException.cs ===
+namespace back.Exceptions
+{
+    public class ApiException
+    {
+        public ApiException(int statusCode, string? message = null, string? details = null)
+        {
+            StatusCode = statusCode;
+            Message = message;
+            Details = details;
+        }
+
+        public int StatusCode { get; set; }
+        public string? Message { get; set; }
+        public string? Details { get; set; }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Middleware\ExceptionMiddleware.cs ===
+using System;
+using System.Net;
+using System.Text.Json;
+using System.Threading.Tasks;
+using back.Exceptions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace back.Middleware
+{
+    public class ExceptionMiddleware
+    {
+        private readonly RequestDelegate _next;
+        private readonly ILogger<ExceptionMiddleware> _logger;
+        private readonly IHostEnvironment _env;
+
+        public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger, IHostEnvironment env)
+        {
+            _next = next;
+            _logger = logger;
+            _env = env;
+        }
+
+        public async Task InvokeAsync(HttpContext context)
+        {
+            try
+            {
+                await _next(context);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, ex.Message);
+                context.Response.ContentType = "application/json";
+                context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+
+                var response = _env.IsDevelopment()
+                    ? new ApiException(context.Response.StatusCode, ex.Message, ex.StackTrace?.ToString())
+                    : new ApiException(context.Response.StatusCode, "Internal Server Error");
+
+                var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+                var json = JsonSerializer.Serialize(response, options);
+
+                await context.Response.WriteAsync(json);
+            }
+        }
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Services\ITokenService.cs ===
+using back.Entities;
+
+namespace back.Services
+{
+    public interface ITokenService
+    {
+        string CreateToken(User user);
+    }
+}
+
+
+
+
+=== FILE: C:\Users\11yer\source\repos\back-SIGAC\back\Services\TokenService.cs ===
+using System;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using back.Entities;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+
+namespace back.Services
+{
+    public class TokenService : ITokenService
+    {
+        private readonly SymmetricSecurityKey _key;
+        public TokenService(IConfiguration config)
+        {
+            _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["TokenKey"]));
+        }
+
+        public string CreateToken(User user)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(System.Security.Claims.ClaimTypes.Name, user.Username)
+            };
+
+            if (user.Persona != null)
+            {
+                var roles = user.Persona.GetRoles();
+                foreach (var role in roles)
+                {
+                    claims.Add(new Claim(System.Security.Claims.ClaimTypes.Role, role));
+                }
+            }
+
+            var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.Now.AddDays(7),
+                SigningCredentials = creds
+            };
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+
+            return tokenHandler.WriteToken(token);
+        }
+    }
+}
+
+
+
+

@@ -591,6 +591,16 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetMisMaterias",
+    "RelativePath": "api/Estudiante/mis-materias",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "back.Controllers.EstudiantesBulkController",
     "Method": "BulkUpload",
     "RelativePath": "api/estudiantes/bulk-upload",

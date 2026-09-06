@@ -241,6 +241,36 @@ namespace back.Controllers
             return Ok(new { message = "Entrega registrada correctamente.", archivoUrl = entrega.ArchivoUrl });
         }
 
+        [HttpGet("mis-materias")]
+        public async Task<IActionResult> GetMisMaterias()
+        {
+            if (EstudianteId == null) return Unauthorized();
+
+            var materias = await _context.Inscripciones
+                .Where(i => i.EstudianteId == EstudianteId.Value)
+                .Include(i => i.Catedra)
+                    .ThenInclude(c => c.Docente)
+                        .ThenInclude(d => d.Persona)
+                .Select(i => new
+                {
+                    id = i.Catedra.Id,
+                    codigo = $"CAT-{i.Catedra.Id:D3}",
+                    nombre = i.Catedra.Nombre,
+                    descripcion = $"Cátedra correspondiente al semestre {i.Catedra.Semestre}",
+                    docente = i.Catedra.Docente != null && i.Catedra.Docente.Persona != null
+                        ? $"{i.Catedra.Docente.Persona.Nombre} {i.Catedra.Docente.Persona.Apellido}"
+                        : "Docente por asignar",
+                    creditos = 4,
+                    semana = 8,
+                    totalSemanas = 16,
+                    semestre = i.Catedra.Semestre,
+                    grupo = "Grupo A"
+                })
+                .ToListAsync();
+
+            return Ok(materias);
+        }
+
         [HttpPost("ayudantias/{ayudantiaId}/bitacora-multipart")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> RegistrarBitacoraMultipart(int ayudantiaId, [FromForm] RegistrarBitacoraMultipartDto dto)
