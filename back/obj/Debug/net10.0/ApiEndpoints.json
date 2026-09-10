@@ -644,6 +644,16 @@
   },
   {
     "ContainingType": "back.Controllers.EstudiantesBulkController",
+    "Method": "GetPresentaciones",
+    "RelativePath": "api/estudiantes/presentaciones",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudiantesBulkController",
     "Method": "DownloadTemplate",
     "RelativePath": "api/estudiantes/template",
     "HttpMethod": "GET",
@@ -666,6 +676,16 @@
         "IsRequired": true
       }
     ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.JuradoController",
+    "Method": "GetPresentaciones",
+    "RelativePath": "api/Jurado/presentaciones",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
     "ReturnTypes": []
   },
   {

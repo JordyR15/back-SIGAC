@@ -41,6 +41,33 @@ namespace back.Controllers
             return File(bytes, "text/csv", "estudiantes_plantilla.csv");
         }
 
+        // Endpoint para listar presentaciones convocadas (evita el error 405)
+        [HttpGet("presentaciones")]
+        [Authorize]
+        public async Task<IActionResult> GetPresentaciones()
+        {
+            var presentaciones = await _context.Presentaciones
+                .Include(p => p.Ayudantia)
+                    .ThenInclude(a => a.Catedra)
+                .Include(p => p.Ayudantia)
+                    .ThenInclude(a => a.Estudiante)
+                        .ThenInclude(e => e.Persona)
+                .Include(p => p.Jurados)
+                    .ThenInclude(j => j.Persona)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.AyudantiaId,
+                    p.Fecha,
+                    Catedra = p.Ayudantia.Catedra.Nombre,
+                    Postulante = p.Ayudantia.Estudiante.Persona.Nombre + " " + p.Ayudantia.Estudiante.Persona.Apellido,
+                    Jurados = p.Jurados.Select(j => j.Persona.Nombre + " " + j.Persona.Apellido).ToList()
+                })
+                .ToListAsync();
+
+            return Ok(presentaciones);
+        }
+
         // GET /api/estudiantes/imports/{jobId}/result -> descarga CSV resultado (solo creador o Administrador)
         [HttpGet("imports/{jobId}/result")]
         public async Task<IActionResult> DownloadImportResult(int jobId)

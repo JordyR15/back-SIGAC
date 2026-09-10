@@ -55,13 +55,13 @@ namespace back.Controllers
 
             if (inscripcion == null)
             {
-                return Forbid("Debes estar inscrito en la cátedra para postular a ayudantía.");
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Debes estar inscrito en la cátedra para postular a ayudantía." });
             }
 
             var catedra = await _context.Catedras.FindAsync(postulacionDto.CatedraId);
             if (catedra != null && catedra.MinimoNota.HasValue && inscripcion.PromedioActual < catedra.MinimoNota.Value)
             {
-                return Forbid("Tu promedio actual es menor que la nota mínima para postular a esta ayudantía.");
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tu promedio actual es menor que la nota mínima para postular a esta ayudantía." });
             }
 
             var ayudantia = new Ayudantia
@@ -321,7 +321,7 @@ namespace back.Controllers
 
             if (!isOwner)
             {
-                return Forbid("No tienes permiso para realizar acciones sobre esta ayudantía.");
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tienes permiso para realizar acciones sobre esta ayudantía." });
             }
 
             return null; // Null indica que la validación fue exitosa

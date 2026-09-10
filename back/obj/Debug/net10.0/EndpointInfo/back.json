@@ -1107,6 +1107,18 @@
         }
       }
     },
+    "/api/estudiantes/presentaciones": {
+      "get": {
+        "tags": [
+          "EstudiantesBulk"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/estudiantes/imports/{jobId}/result": {
       "get": {
         "tags": [
@@ -1203,6 +1215,16 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Jurado"
+        ],
         "responses": {
           "200": {
             "description": "OK"
