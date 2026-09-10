@@ -1,0 +1,8 @@
+{
+  "name": "SIGAC API",
+  "description": "Sistema Integrado de Gestión Académica y Cátedras (SIGAC) - Backend API REST con autenticación JWT, gestión de cátedras, sesiones, ayudantías y calificaciones.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

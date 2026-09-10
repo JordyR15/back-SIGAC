@@ -12,5 +12,8 @@ namespace back.DTOs
         public string Nombre { get; set; }
         public string Apellido { get; set; }
         public string Correo { get; set; }
+        public string? TempPassword { get; set; }
+        public bool Success { get; set; } = true;
+        public string? Message { get; set; }
     }
 }

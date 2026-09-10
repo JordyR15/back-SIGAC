@@ -9,7 +9,10 @@ namespace back.Entities
         public Catedra Catedra { get; set; }
         public int EstudianteId { get; set; } // Ayudante
         public User Estudiante { get; set; }
+        public int? ConvocatoriaId { get; set; }
         public string Estado { get; set; } // Ej: "Activa", "Finalizada", "Pendiente"
+        // Horas asignadas para labores de ayudantía (refuerzo)
+        public int HorasAsignadas { get; set; }
 
         public ICollection<ActividadAyudantia> Planificacion { get; set; } = new List<ActividadAyudantia>();
         public ICollection<Bitacora> Bitacoras { get; set; } = new List<Bitacora>();

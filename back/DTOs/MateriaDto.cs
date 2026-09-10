@@ -1,4 +1,4 @@
-﻿namespace back.DTOs
+namespace back.DTOs
 {
     public class MateriaDto
     {
@@ -14,5 +14,15 @@
         // Opcional: si necesitas incluir recursos o actividades
         public List<RecursoDto> Recursos { get; set; }
         public List<ActividadDto> Actividades { get; set; }
+    }
+
+    public class CreateMateriaDto
+    {
+        public string? Nombre { get; set; }
+        public string? Codigo { get; set; }
+        public string? Descripcion { get; set; }
+        public long? DocenteId { get; set; }
+        public long? DocenteResponsableId { get; set; }
+        public string? Semestre { get; set; }
     }
 }

@@ -113,6 +113,49 @@ namespace back.Controllers
             _context.PresentacionEvaluaciones.Add(eval);
             await _context.SaveChangesAsync();
 
+            // Recalcular promedio y, si aprueba, marcar la postulación/ayudantía como aprobada y asignar rol
+            var presentacionConEvaluaciones = await _context.Presentaciones
+                .Include(p => p.Evaluaciones)
+                .Include(p => p.Ayudantia)
+                    .ThenInclude(a => a.Estudiante)
+                        .ThenInclude(u => u.Persona)
+                .FirstOrDefaultAsync(p => p.Id == presentacionId);
+
+            if (presentacionConEvaluaciones != null)
+            {
+                var todas = presentacionConEvaluaciones.Evaluaciones.Select(e => e.Nota).ToList();
+                if (todas.Any())
+                {
+                    var promedio = todas.Average();
+                    if (promedio >= 7.0)
+                    {
+                        var ayud = presentacionConEvaluaciones.Ayudantia;
+                        if (ayud != null)
+                        {
+                            ayud.Estado = "Aprobada";
+
+                            // Asignar rol Ayudante al estudiante si no lo tiene
+                            var estudiante = ayud.Estudiante;
+                            if (estudiante != null)
+                            {
+                                var persona = estudiante.Persona ?? await _context.Personas.FirstOrDefaultAsync(p => p.UserId == estudiante.Id);
+                                if (persona != null)
+                                {
+                                    var roles = persona.GetRoles();
+                                    if (!roles.Contains("Ayudante"))
+                                    {
+                                        roles.Add("Ayudante");
+                                        persona.SetRoles(roles);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+            }
+
             return Ok(new { message = "Evaluación registrada." });
         }
 

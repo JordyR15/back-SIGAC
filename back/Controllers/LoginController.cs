@@ -20,11 +20,19 @@ namespace back.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ITokenService _tokenService;
+        private readonly IEmailService _emailService;
+        private readonly ILogger<LoginController> _logger;
 
-        public LoginController(AppDbContext context, ITokenService tokenService)
+        public LoginController(
+            AppDbContext context, 
+            ITokenService tokenService, 
+            IEmailService emailService,
+            ILogger<LoginController> logger)
         {
             _context = context;
             _tokenService = tokenService;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         [HttpPost("register")]
@@ -102,6 +110,24 @@ namespace back.Controllers
 
             user.Persona = persona;
 
+            // Despachar credenciales por correo electrónico con formato HTML
+            try
+            {
+                var fullName = $"{persona.Nombre} {persona.Apellido}".Trim();
+                var mainRole = requestedRoles.FirstOrDefault() ?? persona.Rol;
+                await _emailService.SendCredentialsEmailAsync(
+                    persona.Correo,
+                    fullName,
+                    user.Username,
+                    registerDto.Password,
+                    mainRole
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No fue posible despachar el correo de credenciales para {Correo}", persona.Correo);
+            }
+
             return new UserDto
             {
                 Id = user.Id,
@@ -128,7 +154,7 @@ namespace back.Controllers
 
             var user = await _context.Users
                 .Include(u => u.Persona)
-                .SingleOrDefaultAsync(x => x.Username == normalizedUsername);
+                .SingleOrDefaultAsync(x => x.Username == normalizedUsername || (x.Persona != null && x.Persona.Correo.ToLower() == normalizedUsername));
 
             if (user == null)
             {
@@ -159,6 +185,69 @@ namespace back.Controllers
                 Apellido = user.Persona?.Apellido,
                 Correo = user.Persona?.Correo
             };
+        }
+
+        [HttpPost("forgot-password")]
+        [HttpPost("recuperar-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.EmailOrUsername))
+            {
+                return BadRequest(new { message = "Debe proporcionar su usuario o correo electrónico institucional." });
+            }
+
+            var normalized = dto.EmailOrUsername.Trim().ToLowerInvariant();
+            var user = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Username == normalized || (u.Persona != null && u.Persona.Correo.ToLower() == normalized));
+
+            if (user == null || user.Persona == null || string.IsNullOrWhiteSpace(user.Persona.Correo))
+            {
+                // Por seguridad evitamos revelar si el usuario existe o no
+                return Ok(new { message = "Si los datos coinciden con un usuario registrado, se ha enviado un correo con las instrucciones." });
+            }
+
+            // Generar una contraseña temporal segura
+            var randomPart = RandomNumberGenerator.GetInt32(100000, 999999);
+            var tempPassword = $"Uteq.{randomPart}!";
+
+            using var hmac = new HMACSHA512();
+            user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(tempPassword));
+            user.PasswordSalt = hmac.Key;
+
+            await _context.SaveChangesAsync();
+
+            var fullName = $"{user.Persona.Nombre} {user.Persona.Apellido}".Trim();
+            await _emailService.SendPasswordResetEmailAsync(user.Persona.Correo, fullName, tempPassword);
+
+            return Ok(new { message = "Se ha enviado un correo electrónico con las instrucciones de restablecimiento de contraseña." });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.EmailOrUsername) || string.IsNullOrWhiteSpace(dto.NewPassword))
+            {
+                return BadRequest(new { message = "Datos incompletos para restablecer la contraseña." });
+            }
+
+            var normalized = dto.EmailOrUsername.Trim().ToLowerInvariant();
+            var user = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Username == normalized || (u.Persona != null && u.Persona.Correo.ToLower() == normalized));
+
+            if (user == null)
+            {
+                return NotFound(new { message = "Usuario no encontrado." });
+            }
+
+            using var hmac = new HMACSHA512();
+            user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(dto.NewPassword));
+            user.PasswordSalt = hmac.Key;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Contraseña actualizada exitosamente." });
         }
 
         private static List<string> GetRequestedRoles(List<string> roles, string legacyRole)

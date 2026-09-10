@@ -16,7 +16,9 @@ namespace back.Data
         public DbSet<Evaluacion> Evaluaciones { get; set; }
         public DbSet<IndicadorCualitativo> IndicadoresCualitativos { get; set; }
         public DbSet<Ayudantia> Ayudantias { get; set; }
+        public DbSet<Convocatoria> Convocatorias { get; set; }
         public DbSet<ActividadAyudantia> ActividadesAyudantia { get; set; }
+        public DbSet<Tema> Temas { get; set; }
         public DbSet<Bitacora> Bitacoras { get; set; }
         public DbSet<CronogramaActividad> Cronogramas { get; set; }
         public DbSet<Recurso> Recursos { get; set; }
@@ -24,6 +26,7 @@ namespace back.Data
         public DbSet<ClaseSesion> ClasesSesiones { get; set; }
         public DbSet<Asistencia> Asistencias { get; set; }
         public DbSet<Clase> Clases { get; set; }
+        public DbSet<Materia> Materias { get; set; }
         public DbSet<RecursoVistoPorEstudiante> RecursosVistosPorEstudiante { get; set; } // Añadido
 
         // Presentaciones y evaluaciones realizadas por jurados en las postulaciones
@@ -47,7 +50,7 @@ namespace back.Data
 
             // Relaciones de Inscripcion
             modelBuilder.Entity<Inscripcion>()
-                .HasKey(i => new { i.EstudianteId, i.CatedraId });
+                .HasKey(i => i.Id);
 
             modelBuilder.Entity<Inscripcion>()
                 .HasOne(i => i.Estudiante)
@@ -58,7 +61,14 @@ namespace back.Data
             modelBuilder.Entity<Inscripcion>()
                 .HasOne(i => i.Catedra)
                 .WithMany(c => c.Inscripciones)
-                .HasForeignKey(i => i.CatedraId);
+                .HasForeignKey(i => i.CatedraId)
+                .IsRequired(false);
+
+            modelBuilder.Entity<Inscripcion>()
+                .HasOne(i => i.Clase)
+                .WithMany()
+                .HasForeignKey(i => i.ClaseId)
+                .IsRequired(false);
 
             // Relaciones de Catedra
             modelBuilder.Entity<Catedra>()

@@ -20,6 +20,18 @@ namespace back.Controllers
             _context = context;
         }
 
+        [HttpPut("convocatorias/{id}/publicar")]
+        public async Task<IActionResult> PublicarConvocatoria(int id)
+        {
+            var conv = await _context.Convocatorias.FindAsync(id);
+            if (conv == null) return NotFound("Convocatoria no encontrada.");
+
+            conv.Estado = "Publicada";
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Convocatoria publicada." });
+        }
+
         [HttpGet("ayudantias/solicitudes")]
         public async Task<IActionResult> ObtenerSolicitudesAyudantia()
         {

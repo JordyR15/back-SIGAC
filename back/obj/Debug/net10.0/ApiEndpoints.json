@@ -1,5 +1,51 @@
 [
   {
+    "ContainingType": "Program\u002B\u003C\u003Ec",
+    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_8",
+    "RelativePath": "",
+    "HttpMethod": "GET",
+    "IsController": false,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Void",
+        "MediaTypes": [],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "back.Controllers.AyudanteController",
+    "Method": "GetClasesAyudante",
+    "RelativePath": "api/Ayudante/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetHistorialAyudantias",
+    "RelativePath": "api/ayudantias/historial",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetAllClases",
+    "RelativePath": "api/Clase",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "back.Controllers.ClaseController",
     "Method": "CreateClase",
     "RelativePath": "api/Clase",
@@ -8,8 +54,29 @@
     "Order": 0,
     "Parameters": [
       {
-        "Name": "createClaseDto",
-        "Type": "back.DTOs.CreateClaseDto",
+        "Name": "rawBody",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "AssignAyudanteToClase",
+    "RelativePath": "api/Clase/{claseId}/ayudante",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "payload",
+        "Type": "System.Text.Json.JsonElement",
         "IsRequired": true
       }
     ],
@@ -25,12 +92,12 @@
     "Parameters": [
       {
         "Name": "claseId",
-        "Type": "System.Int32",
+        "Type": "System.Int64",
         "IsRequired": true
       },
       {
-        "Name": "estudianteIds",
-        "Type": "System.Collections.Generic.List\u00601[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Name": "payload",
+        "Type": "System.Text.Json.JsonElement",
         "IsRequired": true
       }
     ],
@@ -46,7 +113,7 @@
     "Parameters": [
       {
         "Name": "claseId",
-        "Type": "System.Int32",
+        "Type": "System.Int64",
         "IsRequired": true
       }
     ],
@@ -64,6 +131,27 @@
   },
   {
     "ContainingType": "back.Controllers.ClaseController",
+    "Method": "RemoveEstudianteFromClase",
+    "RelativePath": "api/Clase/{claseId}/estudiantes/{estudianteId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "estudianteId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
     "Method": "GetClaseById",
     "RelativePath": "api/Clase/{id}",
     "HttpMethod": "GET",
@@ -72,7 +160,7 @@
     "Parameters": [
       {
         "Name": "id",
-        "Type": "System.Int32",
+        "Type": "System.Int64",
         "IsRequired": true
       }
     ],
@@ -87,6 +175,211 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetClasesByDocente",
+    "RelativePath": "api/Clase/docente/{docenteId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "docenteId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetClasesEstudiante",
+    "RelativePath": "api/Clase/estudiante/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetAllClases",
+    "RelativePath": "api/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "CreateClase",
+    "RelativePath": "api/clases",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "rawBody",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "AssignAyudanteToClase",
+    "RelativePath": "api/clases/{claseId}/ayudante",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "payload",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "AddEstudiantesToClase",
+    "RelativePath": "api/clases/{claseId}/estudiantes",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "payload",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetEstudiantesFromClase",
+    "RelativePath": "api/clases/{claseId}/estudiantes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[back.DTOs.UserDto, back, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "RemoveEstudianteFromClase",
+    "RelativePath": "api/clases/{claseId}/estudiantes/{estudianteId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "estudianteId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetClaseById",
+    "RelativePath": "api/clases/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "back.DTOs.ClaseDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetClasesByDocente",
+    "RelativePath": "api/clases/docente/{docenteId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "docenteId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetClasesEstudiante",
+    "RelativePath": "api/clases/estudiante/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "back.Controllers.ClaseSesionController",
@@ -344,6 +637,102 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "back.Controllers.CoordinadorController",
+    "Method": "PublicarConvocatoria",
+    "RelativePath": "api/Coordinador/convocatorias/{id}/publicar",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.CronogramaController",
+    "Method": "CreateCronogramaActividad",
+    "RelativePath": "api/Cronograma",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.CronogramaActividadDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.CronogramaController",
+    "Method": "GetCronogramaByCatedra",
+    "RelativePath": "api/Cronograma/{catedraId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "catedraId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DebugController",
+    "Method": "GetDbStatus",
+    "RelativePath": "api/Debug/db-status",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "username",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "GetClasesDocentePorId",
+    "RelativePath": "api/Docente/{id}/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "GetMateriasPorDocente",
+    "RelativePath": "api/Docente/{id}/materias",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "back.Controllers.DocenteController",
     "Method": "ObtenerEntregasPorActividad",
     "RelativePath": "api/Docente/actividades/{actividadId}/entregas",
@@ -455,6 +844,301 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "GetClasesDocenteLogueado",
+    "RelativePath": "api/Docente/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "AddEstudiantesToClase",
+    "RelativePath": "api/Docente/clases/{claseId}/estudiantes",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "payload",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "RemoveEstudianteFromClase",
+    "RelativePath": "api/Docente/clases/{claseId}/estudiantes/{estudianteId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "claseId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "estudianteId",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "CrearConvocatoria",
+    "RelativePath": "api/Docente/convocatorias",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.CreateConvocatoriaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "GetClasesDocentePorId",
+    "RelativePath": "api/docentes/{id}/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "GetMateriasPorDocente",
+    "RelativePath": "api/docentes/{id}/materias",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "ObtenerEntregasPorActividad",
+    "RelativePath": "api/docentes/actividades/{actividadId}/entregas",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "actividadId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "CalificarEntrega",
+    "RelativePath": "api/docentes/actividades/calificar",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.CalificarEntregaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "MonitorearCumplimientoAyudante",
+    "RelativePath": "api/docentes/ayudantias/{ayudantiaId}/monitoreo",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ayudantiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "PlanificarActividadesAyudantia",
+    "RelativePath": "api/docentes/ayudantias/{ayudantiaId}/planificacion",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ayudantiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "actividadDto",
+        "Type": "back.DTOs.ActividadAyudantiaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "ReprogramarCronograma",
+    "RelativePath": "api/docentes/catedras/{catedraId}/cronograma",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "catedraId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "cronogramaDto",
+        "Type": "back.DTOs.CronogramaActividadDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "RegistrarEvaluacionDiagnostica",
+    "RelativePath": "api/docentes/catedras/{catedraId}/evaluacion-diagnostica",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "catedraId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "evaluacionDto",
+        "Type": "back.DTOs.EvaluacionDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "GetClasesDocenteLogueado",
+    "RelativePath": "api/docentes/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.DocenteController",
+    "Method": "CrearConvocatoria",
+    "RelativePath": "api/docentes/convocatorias",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.CreateConvocatoriaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetAllEstudiantes",
+    "RelativePath": "api/Estudiante",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "DeleteEstudiante",
+    "RelativePath": "api/Estudiante/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.ClaseController",
+    "Method": "GetClasesEstudiante",
+    "RelativePath": "api/estudiante/{id}/clases",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetMateriasEstudiante",
+    "RelativePath": "api/Estudiante/{id}/materias",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "back.Controllers.EstudianteController",
     "Method": "ValidacionMalla",
     "RelativePath": "api/Estudiante/{id}/validacion-malla",
@@ -464,12 +1148,12 @@
     "Parameters": [
       {
         "Name": "id",
-        "Type": "System.Int32",
+        "Type": "System.Int64",
         "IsRequired": true
       },
       {
         "Name": "catedraId",
-        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "Type": "System.Nullable\u00601[[System.Int64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
         "IsRequired": false
       }
     ],
@@ -546,17 +1230,7 @@
     "IsController": true,
     "Order": 0,
     "Parameters": [],
-    "ReturnTypes": [
-      {
-        "Type": "System.Collections.Generic.IEnumerable\u00601[[back.DTOs.HistorialAyudantiaDto, back, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
-        "MediaTypes": [
-          "text/plain",
-          "application/json",
-          "text/json"
-        ],
-        "StatusCode": 200
-      }
-    ]
+    "ReturnTypes": []
   },
   {
     "ContainingType": "back.Controllers.EstudianteController",
@@ -601,6 +1275,190 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "PostularAConvocatoria",
+    "RelativePath": "api/Estudiante/postulaciones",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.PostulacionAyudantiaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetAllEstudiantes",
+    "RelativePath": "api/estudiantes",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "DeleteEstudiante",
+    "RelativePath": "api/estudiantes/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetMateriasEstudiante",
+    "RelativePath": "api/estudiantes/{id}/materias",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "ValidacionMalla",
+    "RelativePath": "api/estudiantes/{id}/validacion-malla",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "catedraId",
+        "Type": "System.Nullable\u00601[[System.Int64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "EntregarActividad",
+    "RelativePath": "api/estudiantes/actividades/{actividadId}/entregar",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "actividadId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "archivo",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "RegistrarBitacoraMultipart",
+    "RelativePath": "api/estudiantes/ayudantias/{ayudantiaId}/bitacora-multipart",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ayudantiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "ActividadesRealizadas",
+        "Type": "System.String",
+        "IsRequired": false
+      },
+      {
+        "Name": "Archivo",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "RegistrarEnBitacora",
+    "RelativePath": "api/estudiantes/ayudantias/bitacora",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "registroDto",
+        "Type": "back.DTOs.RegistroBitacoraDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetHistorialAyudantias",
+    "RelativePath": "api/estudiantes/ayudantias/historial",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GenerarInformeMensual",
+    "RelativePath": "api/estudiantes/ayudantias/informe-mensual",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "back.DTOs.InformeMensualRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "PostularAyudantia",
+    "RelativePath": "api/estudiantes/ayudantias/postulaciones",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "postulacionDto",
+        "Type": "back.DTOs.PostulacionAyudantiaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "back.Controllers.EstudiantesBulkController",
     "Method": "BulkUpload",
     "RelativePath": "api/estudiantes/bulk-upload",
@@ -637,6 +1495,32 @@
       {
         "Name": "jobId",
         "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "GetMisMaterias",
+    "RelativePath": "api/estudiantes/mis-materias",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.EstudianteController",
+    "Method": "PostularAConvocatoria",
+    "RelativePath": "api/estudiantes/postulaciones",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.PostulacionAyudantiaDto",
         "IsRequired": true
       }
     ],
@@ -727,6 +1611,22 @@
   },
   {
     "ContainingType": "back.Controllers.LoginController",
+    "Method": "ForgotPassword",
+    "RelativePath": "api/Login/forgot-password",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.ForgotPasswordDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.LoginController",
     "Method": "Login",
     "RelativePath": "api/Login/login",
     "HttpMethod": "POST",
@@ -753,6 +1653,22 @@
   },
   {
     "ContainingType": "back.Controllers.LoginController",
+    "Method": "ForgotPassword",
+    "RelativePath": "api/Login/recuperar-password",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.ForgotPasswordDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.LoginController",
     "Method": "Register",
     "RelativePath": "api/Login/register",
     "HttpMethod": "POST",
@@ -776,6 +1692,101 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "back.Controllers.LoginController",
+    "Method": "ResetPassword",
+    "RelativePath": "api/Login/reset-password",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.ResetPasswordDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetAllMaterias",
+    "RelativePath": "api/Materia",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "CreateMateria",
+    "RelativePath": "api/Materia",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "rawBody",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetMateriaById",
+    "RelativePath": "api/Materia/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "UpdateMateria",
+    "RelativePath": "api/Materia/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "rawBody",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "DeleteMateria",
+    "RelativePath": "api/Materia/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "back.Controllers.MateriaController",
@@ -899,6 +1910,43 @@
   },
   {
     "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetTemasByMateria",
+    "RelativePath": "api/Materia/{materiaId}/temas",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "AddTemaToMateria",
+    "RelativePath": "api/Materia/{materiaId}/temas",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "temaDto",
+        "Type": "back.DTOs.TemaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
     "Method": "MarkRecursoAsSeen",
     "RelativePath": "api/Materia/recursos/marcar-visto",
     "HttpMethod": "POST",
@@ -914,13 +1962,276 @@
     "ReturnTypes": []
   },
   {
-    "ContainingType": "back.Controllers.PersonaController",
-    "Method": "GetPersona",
-    "RelativePath": "api/Persona",
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetAllMaterias",
+    "RelativePath": "api/materias",
     "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,
     "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "CreateMateria",
+    "RelativePath": "api/materias",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "rawBody",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetMateriaById",
+    "RelativePath": "api/materias/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "UpdateMateria",
+    "RelativePath": "api/materias/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      },
+      {
+        "Name": "rawBody",
+        "Type": "System.Text.Json.JsonElement",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "DeleteMateria",
+    "RelativePath": "api/materias/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "AddActividad",
+    "RelativePath": "api/materias/{materiaId}/actividades",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "createActividadDto",
+        "Type": "back.DTOs.CreateActividadDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetActividadesByMateria",
+    "RelativePath": "api/materias/{materiaId}/actividades",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[back.DTOs.ActividadDto, back, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "AddRecurso",
+    "RelativePath": "api/materias/{materiaId}/recursos",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "createRecursoDto",
+        "Type": "back.DTOs.CreateRecursoDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetRecursosByMateria",
+    "RelativePath": "api/materias/{materiaId}/recursos",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[back.DTOs.RecursoDto, back, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetRecursosConEstadoByMateria",
+    "RelativePath": "api/materias/{materiaId}/recursos/estado",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[back.DTOs.RecursoConEstadoDto, back, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "GetTemasByMateria",
+    "RelativePath": "api/materias/{materiaId}/temas",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "AddTemaToMateria",
+    "RelativePath": "api/materias/{materiaId}/temas",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "temaDto",
+        "Type": "back.DTOs.TemaDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "MarkRecursoAsSeen",
+    "RelativePath": "api/materias/recursos/marcar-visto",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "markRecursoAsSeenDto",
+        "Type": "back.DTOs.MarkRecursoAsSeenDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.PersonaController",
+    "Method": "GetPersonas",
+    "RelativePath": "api/Persona",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "rol",
+        "Type": "System.String",
+        "IsRequired": false
+      },
+      {
+        "Name": "me",
+        "Type": "System.Nullable\u00601[[System.Boolean, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
     "ReturnTypes": []
   },
   {
@@ -940,6 +2251,58 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "back.Controllers.PersonaController",
+    "Method": "GetPersonaById",
+    "RelativePath": "api/Persona/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.PersonaController",
+    "Method": "DeletePersona",
+    "RelativePath": "api/Persona/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int64",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.PersonaController",
+    "Method": "GetMiPerfil",
+    "RelativePath": "api/Persona/me",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.PersonaController",
+    "Method": "GetMiPerfil",
+    "RelativePath": "api/Persona/perfil",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "back.Controllers.RolesController",
     "Method": "SetUserRole",
     "RelativePath": "api/Roles/{userId}",
@@ -955,6 +2318,59 @@
       {
         "Name": "dto",
         "Type": "back.DTOs.SetUserRoleDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.UsuariosController",
+    "Method": "GetUsuarios",
+    "RelativePath": "api/Usuarios",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "rol",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.UsuariosController",
+    "Method": "CreateUsuario",
+    "RelativePath": "api/Usuarios",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "back.DTOs.RegisterDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.UsuariosController",
+    "Method": "UpdateUsuario",
+    "RelativePath": "api/Usuarios/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "personaDto",
+        "Type": "back.DTOs.PersonaDto",
         "IsRequired": true
       }
     ],

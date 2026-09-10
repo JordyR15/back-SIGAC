@@ -14,6 +14,7 @@ namespace back.Entities
         public string Apellido { get; set; }
         [Required]
         public string Correo { get; set; }
+        public string? Cedula { get; set; }
 
         // Legacy / normalized storage for roles. Use comma-separated values to support multiple roles.
         [Required]
