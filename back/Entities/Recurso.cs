@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace back.Entities
 {
     public class Recurso
@@ -8,6 +10,9 @@ namespace back.Entities
         public string Url { get; set; } // URL al archivo o enlace externo
         public bool EsEsencial { get; set; } // Para la barra lateral
         public int MateriaId { get; set; }
+
+        // Links adicionales (videos, páginas externas)
+        public List<string> Links { get; set; } = new List<string>();
 
         // Navigation property
         public Materia Materia { get; set; }

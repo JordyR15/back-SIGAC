@@ -197,6 +197,15 @@ namespace back.Data
                 .HasForeignKey(e => e.ActividadId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Map Recurso.Links to jsonb column using a ValueConverter
+            modelBuilder.Entity<Recurso>()
+                .Property(r => r.Links)
+                .HasColumnType("jsonb")
+                .HasConversion(new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<System.Collections.Generic.List<string>, string>(
+                    v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                    v => System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new System.Collections.Generic.List<string>()
+                ));
+
         }
     }
 }

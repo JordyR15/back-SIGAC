@@ -4,9 +4,12 @@ using back.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -21,9 +24,12 @@ namespace back.Controllers
     {
         private readonly AppDbContext _context;
 
-        public MateriaController(AppDbContext context)
+        private readonly IConfiguration _config;
+
+        public MateriaController(AppDbContext context, IConfiguration config)
         {
             _context = context;
+            _config = config;
         }
 
         // Propiedad para obtener de forma segura el ID del usuario autenticado
@@ -455,21 +461,67 @@ namespace back.Controllers
                 Descripcion = createRecursoDto.Descripcion,
                 Url = createRecursoDto.Url,
                 EsEsencial = createRecursoDto.EsEsencial,
-                MateriaId = materiaId
+                MateriaId = materiaId,
+                Links = createRecursoDto.Links ?? new System.Collections.Generic.List<string>()
             };
 
             _context.Recursos.Add(recurso);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetRecursosByMateria), new { materiaId = materiaId }, new RecursoDto
+            var recursoDto = new RecursoDto
             {
                 Id = recurso.Id,
                 Titulo = recurso.Titulo,
                 Descripcion = recurso.Descripcion,
                 Url = recurso.Url,
                 EsEsencial = recurso.EsEsencial,
-                MateriaId = recurso.MateriaId
-            });
+                MateriaId = recurso.MateriaId,
+                Links = recurso.Links ?? new System.Collections.Generic.List<string>()
+            };
+
+            return CreatedAtAction(nameof(GetRecursosByMateria), new { materiaId = materiaId }, recursoDto);
+        }
+
+        // Upload file to Supabase Storage and return public URL (does not create recurso record)
+        [HttpPost("{materiaId}/recursos/upload")]
+        public async Task<IActionResult> UploadRecursoFile(int materiaId, IFormFile archivo)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede subir archivos a esta materia.");
+
+            if (archivo == null || archivo.Length == 0) return BadRequest(new { message = "Archivo requerido." });
+
+            var supabaseUrl = _config["Supabase:Url"];
+            var supabaseKey = _config["Supabase:ServiceKey"];
+            var bucket = _config["Supabase:StorageBucket"] ?? "public";
+            if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(supabaseKey))
+                return StatusCode(500, new { message = "Supabase storage no está configurado. Configure Supabase:Url y Supabase:ServiceKey en la configuración." });
+
+            // Use a unique filename to avoid collisions
+            var fileName = $"{System.Guid.NewGuid():N}_{System.IO.Path.GetFileName(archivo.FileName)}";
+
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("apikey", supabaseKey);
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey);
+
+            using var content = new MultipartFormDataContent();
+            using var stream = archivo.OpenReadStream();
+            var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(archivo.ContentType ?? "application/octet-stream");
+            content.Add(fileContent, "file", fileName);
+
+            // POST to Supabase storage; include name query param to set path
+            var uploadUrl = $"{supabaseUrl.TrimEnd('/')}/storage/v1/object/{bucket}?name={Uri.EscapeDataString(fileName)}";
+            var resp = await client.PostAsync(uploadUrl, content);
+            var respBody = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+            {
+                return StatusCode((int)resp.StatusCode, new { message = "Upload failed", detail = respBody });
+            }
+
+            // Construct public URL (Supabase exposes public objects at /storage/v1/object/public/{bucket}/{path})
+            var publicUrl = $"{supabaseUrl.TrimEnd('/')}/storage/v1/object/public/{bucket}/{Uri.EscapeDataString(fileName)}";
+            return Ok(new { url = publicUrl, key = fileName, raw = respBody });
         }
 
         // Endpoint para obtener todos los recursos de una materia (todos los usuarios autorizados)
@@ -682,3 +734,4 @@ namespace back.Controllers
         }
     }
 }
+
