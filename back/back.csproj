@@ -8,6 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Explicitly override transitive vulnerable packages -->
+    <PackageReference Include="System.IO.Packaging" Version="7.0.0" />
+
     <PackageReference Include="ClosedXML" Version="0.102.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />

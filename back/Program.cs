@@ -94,13 +94,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Configurar Kestrel para escuchar en el puerto principal y en un puerto adicional para Swagger UI
-builder.WebHost.ConfigureKestrel(options =>
-{
-    // Escuchar en el puerto por defecto (si se establece via URLs o entorno) y en 5001 para Swagger
-    // Añade un listener explícito para 5001; el puerto 3000 normalmente lo gestiona la configuración existente
-    options.ListenAnyIP(5001);
-});
+// Puerto por defecto de la API. Si el entorno o el despliegue define PORT/ASPNETCORE_URLS,
+// se respeta esa configuración; de lo contrario, queda fijo en 5001 para evitar conflictos.
+var port = builder.Configuration["PORT"] ?? Environment.GetEnvironmentVariable("PORT") ?? "5001";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 var app = builder.Build();
 
@@ -113,42 +110,13 @@ app.UseCors(x => x
     .AllowCredentials()
     .SetIsOriginAllowed(origin => true)); // Permite localhost:3000, localhost:4200, etc.
 
-// 2. Registrar Swagger UI solo en el puerto dedicado (5001)
-// Mapear únicamente las peticiones relacionadas con Swagger (UI y spec) al branch de Swagger.
-// Permitir que las peticiones a /api/* sigan al pipeline principal para ejecutar los endpoints.
-app.MapWhen(ctx => ctx.Request.Host.Port == 5001
-                 && (ctx.Request.Path.StartsWithSegments("/swagger")
-                     || ctx.Request.Path == "/"
-                     || ctx.Request.Path.StartsWithSegments("/index.html")
-                     || ctx.Request.Path.StartsWithSegments("/swagger/v1/swagger.json")), swaggerApp =>
+// 2. Registrar Swagger UI en el mismo puerto de la API
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    swaggerApp.UseSwagger();
-    swaggerApp.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SIGAC API V1");
-        c.RoutePrefix = string.Empty;
-        c.IndexStream = () =>
-        {
-            var stream = c.GetType().Assembly.GetManifestResourceStream("Swashbuckle.AspNetCore.SwaggerUI.index.html");
-            if (stream == null) return null!;
-            using var reader = new StreamReader(stream);
-            var html = reader.ReadToEnd();
-
-            // 1. Elimina completamente el script obsoleto de 2017 para Edge que intentaba hacer 'window.fetch = undefined'
-            var patchedHtml = System.Text.RegularExpressions.Regex.Replace(
-                html,
-                @"<script>\s*if\s*\(\s*window\.navigator\.userAgent\.indexOf\(""Edge""\)[^<]*</script>",
-                "",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
-            patchedHtml = patchedHtml.Replace("window.fetch = undefined;", "");
-
-            // 2. Inyecta protector de window.fetch en el <head> para navegadores modernos o iframes donde fetch sea getter-only
-            var fetchGuardScript = "<head><script>(function(){try{var _f=window.fetch;Object.defineProperty(window,'fetch',{get:function(){return _f;},set:function(fn){if(typeof fn==='function'){_f=fn;}},configurable:true,enumerable:true});}catch(e){}})();</script>";
-            patchedHtml = patchedHtml.Replace("<head>", fetchGuardScript);
-
-            return new MemoryStream(Encoding.UTF8.GetBytes(patchedHtml));
-        };
-    });
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SIGAC API V1");
+    c.RoutePrefix = "swagger";
+    c.DocumentTitle = "SIGAC API Docs";
 });
 
 // 3. Demás middlewares
@@ -156,7 +124,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/", () => Results.Redirect("/index.html"));
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 // Carga Inicial de Datos (Data Seeding)
 await DbInitializer.InitializeAsync(app.Services);

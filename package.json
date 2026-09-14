@@ -4,9 +4,9 @@
   "description": "SIGAC Backend API REST (ASP.NET Core Web API C#)",
   "type": "module",
   "scripts": {
-    "dev": "dotnet run --project back/back.csproj --urls \"http://0.0.0.0:3000\"",
+    "dev": "dotnet run --project back/back.csproj --urls \"http://0.0.0.0:5001\"",
     "build": "dotnet build back/back.csproj",
-    "start": "dotnet run --project back/back.csproj --urls \"http://0.0.0.0:3000\"",
+    "start": "dotnet run --project back/back.csproj --urls \"http://0.0.0.0:5001\"",
     "lint": "dotnet build back/back.csproj"
   }
 }

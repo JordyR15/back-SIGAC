@@ -33,5 +33,5 @@ Backend REST API desarrollado en **C# con ASP.NET Core (.NET Web API)** y **Enti
 dotnet build back/back.csproj
 
 # Ejecutar API
-dotnet run --project back/back.csproj --urls "http://0.0.0.0:3000"
+dotnet run --project back/back.csproj --urls "http://0.0.0.0:5001"
 ```
