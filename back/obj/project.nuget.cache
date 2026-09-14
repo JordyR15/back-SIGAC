@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "18OQoQxJVjA=",
+  "dgSpecHash": "iaw8lm/MzhE=",
   "success": true,
   "projectFilePath": "C:\\Users\\Ryu\\Documents\\Jordy\\Universidad\\S3\\Modelamiento\\SIGAC\\back-c\\back\\back.csproj",
   "expectedPackageFiles": [
@@ -49,33 +49,8 @@
     "C:\\Users\\Ryu\\.nuget\\packages\\system.composition.runtime\\6.0.0\\system.composition.runtime.6.0.0.nupkg.sha512",
     "C:\\Users\\Ryu\\.nuget\\packages\\system.composition.typedparts\\6.0.0\\system.composition.typedparts.6.0.0.nupkg.sha512",
     "C:\\Users\\Ryu\\.nuget\\packages\\system.identitymodel.tokens.jwt\\7.5.1\\system.identitymodel.tokens.jwt.7.5.1.nupkg.sha512",
-    "C:\\Users\\Ryu\\.nuget\\packages\\system.io.packaging\\6.0.0\\system.io.packaging.6.0.0.nupkg.sha512",
+    "C:\\Users\\Ryu\\.nuget\\packages\\system.io.packaging\\7.0.0\\system.io.packaging.7.0.0.nupkg.sha512",
     "C:\\Users\\Ryu\\.nuget\\packages\\xlparser\\1.5.2\\xlparser.1.5.2.nupkg.sha512"
   ],
-  "logs": [
-    {
-      "code": "NU1903",
-      "level": "Warning",
-      "message": "El paquete \"System.IO.Packaging\" 6.0.0 tiene una vulnerabilidad de gravedad alta conocida, https://github.com/advisories/GHSA-f32c-w444-8ppv",
-      "projectPath": "C:\\Users\\Ryu\\Documents\\Jordy\\Universidad\\S3\\Modelamiento\\SIGAC\\back-c\\back\\back.csproj",
-      "warningLevel": 1,
-      "filePath": "C:\\Users\\Ryu\\Documents\\Jordy\\Universidad\\S3\\Modelamiento\\SIGAC\\back-c\\back\\back.csproj",
-      "libraryId": "System.IO.Packaging",
-      "targetGraphs": [
-        "net10.0"
-      ]
-    },
-    {
-      "code": "NU1903",
-      "level": "Warning",
-      "message": "El paquete \"System.IO.Packaging\" 6.0.0 tiene una vulnerabilidad de gravedad alta conocida, https://github.com/advisories/GHSA-qj66-m88j-hmgj",
-      "projectPath": "C:\\Users\\Ryu\\Documents\\Jordy\\Universidad\\S3\\Modelamiento\\SIGAC\\back-c\\back\\back.csproj",
-      "warningLevel": 1,
-      "filePath": "C:\\Users\\Ryu\\Documents\\Jordy\\Universidad\\S3\\Modelamiento\\SIGAC\\back-c\\back\\back.csproj",
-      "libraryId": "System.IO.Packaging",
-      "targetGraphs": [
-        "net10.0"
-      ]
-    }
-  ]
+  "logs": []
 }
