@@ -369,5 +369,171 @@ namespace back.Controllers
 
             return Ok(new { message = "Calificación registrada correctamente.", entregaId = entrega.Id, calificacion = entrega.Calificacion });
         }
+
+        // POST /api/docentes/catedras/{catedraId}/estudiantes/{estudianteId}/indicadores
+        [HttpPost("catedras/{catedraId}/estudiantes/{estudianteId}/indicadores")]
+        public async Task<IActionResult> RegistrarIndicador(int catedraId, int estudianteId, [FromBody] CreateIndicadorCualitativoDto dto)
+        {
+            // Validar autenticación
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
+            // Buscar docente autenticado
+            var docente = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (docente == null)
+                return Unauthorized(new { message = "Usuario no encontrado." });
+
+            // Validar rol Docente usando GetRoles()
+            var roles = docente.Persona?.GetRoles() ?? new List<string>();
+            if (!roles.Any(r => r.Equals("Docente", System.StringComparison.OrdinalIgnoreCase) || 
+                                r.Equals("Profesor", System.StringComparison.OrdinalIgnoreCase)))
+                return Forbid();
+
+            // Validar cátedra existe
+            var catedra = await _context.Catedras.FindAsync(catedraId);
+            if (catedra == null)
+                return NotFound(new { message = "Cátedra no encontrada." });
+
+            // Validar que cátedra pertenece al docente
+            if (catedra.DocenteId != userId)
+                return Forbid();
+
+            // Validar datos de entrada
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Indicador) || string.IsNullOrWhiteSpace(dto.Observacion))
+                return BadRequest(new { message = "Indicador y Observación son requeridos." });
+
+            // Normalizar indicador
+            var indicadorTrimmed = dto.Indicador.Trim();
+            var indicadoresValidos = new[] { "Interés", "Participación", "Desempeño" };
+            var indicadorNormalizado = indicadoresValidos.FirstOrDefault(i => 
+                i.Equals(indicadorTrimmed, System.StringComparison.OrdinalIgnoreCase));
+
+            if (indicadorNormalizado == null)
+                return BadRequest(new { message = "Indicador no válido. Debe ser: Interés, Participación o Desempeño." });
+
+            // Validar estudiante existe
+            var estudiante = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Id == estudianteId);
+
+            if (estudiante == null)
+                return NotFound(new { message = "Estudiante no encontrado." });
+
+            // Validar rol Estudiante
+            var rolesEstudiante = estudiante.Persona?.GetRoles() ?? new List<string>();
+            if (!rolesEstudiante.Any(r => r.Equals("Estudiante", System.StringComparison.OrdinalIgnoreCase)))
+                return BadRequest(new { message = "El usuario no tiene rol de Estudiante." });
+
+            // Validar inscripción
+            var inscripcion = await _context.Inscripciones.AnyAsync(i =>
+                i.EstudianteId == estudianteId &&
+                i.CatedraId == catedraId);
+
+            if (!inscripcion)
+                return BadRequest(new { message = "El estudiante no está inscrito en esta cátedra." });
+
+            // Crear indicador
+            var nuevoIndicador = new IndicadorCualitativo
+            {
+                EstudianteId = estudianteId,
+                CatedraId = catedraId,
+                Indicador = indicadorNormalizado,
+                Observacion = dto.Observacion.Trim(),
+                Fecha = System.DateTime.UtcNow
+            };
+
+            _context.IndicadoresCualitativos.Add(nuevoIndicador);
+            await _context.SaveChangesAsync();
+
+            // Retornar DTO con Id asignado
+            var resultDto = new IndicadorCualitativoDto
+            {
+                Id = nuevoIndicador.Id,
+                EstudianteId = nuevoIndicador.EstudianteId,
+                CatedraId = nuevoIndicador.CatedraId,
+                Indicador = nuevoIndicador.Indicador,
+                Observacion = nuevoIndicador.Observacion,
+                Fecha = nuevoIndicador.Fecha
+            };
+
+            return CreatedAtAction(nameof(ObtenerIndicadoresHistorial), 
+                new { catedraId = catedraId, estudianteId = estudianteId }, 
+                resultDto);
+        }
+
+        // GET /api/docentes/catedras/{catedraId}/estudiantes/{estudianteId}/indicadores
+        [HttpGet("catedras/{catedraId}/estudiantes/{estudianteId}/indicadores")]
+        public async Task<IActionResult> ObtenerIndicadoresHistorial(int catedraId, int estudianteId)
+        {
+            // Validar autenticación
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
+            // Buscar docente autenticado
+            var docente = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (docente == null)
+                return Unauthorized(new { message = "Usuario no encontrado." });
+
+            // Validar rol Docente usando GetRoles()
+            var roles = docente.Persona?.GetRoles() ?? new List<string>();
+            if (!roles.Any(r => r.Equals("Docente", System.StringComparison.OrdinalIgnoreCase) || 
+                                r.Equals("Profesor", System.StringComparison.OrdinalIgnoreCase)))
+                return Forbid();
+
+            // Validar cátedra existe
+            var catedra = await _context.Catedras.FindAsync(catedraId);
+            if (catedra == null)
+                return NotFound(new { message = "Cátedra no encontrada." });
+
+            // Validar que cátedra pertenece al docente
+            if (catedra.DocenteId != userId)
+                return Forbid();
+
+            // Validar estudiante existe
+            var estudiante = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Id == estudianteId);
+
+            if (estudiante == null)
+                return NotFound(new { message = "Estudiante no encontrado." });
+
+            // Validar rol Estudiante
+            var rolesEstudiante = estudiante.Persona?.GetRoles() ?? new List<string>();
+            if (!rolesEstudiante.Any(r => r.Equals("Estudiante", System.StringComparison.OrdinalIgnoreCase)))
+                return BadRequest(new { message = "El usuario no tiene rol de Estudiante." });
+
+            // Validar inscripción
+            var inscripcion = await _context.Inscripciones.AnyAsync(i =>
+                i.EstudianteId == estudianteId &&
+                i.CatedraId == catedraId);
+
+            if (!inscripcion)
+                return BadRequest(new { message = "El estudiante no está inscrito en esta cátedra." });
+
+            // Obtener indicadores ordenados por fecha descendente
+            var indicadores = await _context.IndicadoresCualitativos
+                .Where(ind => ind.EstudianteId == estudianteId && ind.CatedraId == catedraId)
+                .OrderByDescending(ind => ind.Fecha)
+                .Select(ind => new IndicadorCualitativoDto
+                {
+                    Id = ind.Id,
+                    EstudianteId = ind.EstudianteId,
+                    CatedraId = ind.CatedraId,
+                    Indicador = ind.Indicador,
+                    Observacion = ind.Observacion,
+                    Fecha = ind.Fecha
+                })
+                .ToListAsync();
+
+            return Ok(indicadores);
+        }
     }
 }
