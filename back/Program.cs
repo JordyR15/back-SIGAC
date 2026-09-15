@@ -6,13 +6,14 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer(); // Needed for API Explorer
+builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "SIGAC API", Version = "v1" });
@@ -54,17 +55,30 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddCors(); // Add CORS services
 
+// Cadena oficial del Pooler IPv4 de Supabase
+const string poolerConnection = "Host=aws-0-us-west-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.twqiaebuxluhvleijapf;Password=9p-a6@rr7Z/vbTg;SSL Mode=Require;Trust Server Certificate=true;";
+
 var defaultConn = builder.Configuration.GetConnectionString("DefaultConnection");
-var useInMemory = (builder.Configuration["USE_INMEMORY"] ?? Environment.GetEnvironmentVariable("USE_INMEMORY")) == "true";
-if (string.IsNullOrWhiteSpace(defaultConn) || useInMemory)
+
+// Si viene vacía o si alguna variable externa sigue inyectando el host viejo con solo IPv6, forzar el pooler IPv4
+if (string.IsNullOrWhiteSpace(defaultConn) || defaultConn.Contains("db.twqiaebuxluhvleijapf.supabase.co"))
 {
-    // Use in-memory DB for local testing if no connection string is configured or USE_INMEMORY=true
+    defaultConn = poolerConnection;
+}
+
+Console.WriteLine($"\n[INFO BD] Conectando a: {defaultConn}\n");
+
+var useInMemory = (builder.Configuration["USE_INMEMORY"] ?? Environment.GetEnvironmentVariable("USE_INMEMORY")) == "true";
+
+if (useInMemory)
+{
+    // Use in-memory DB for local testing if USE_INMEMORY=true
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseInMemoryDatabase("SIGAC_InMemory"));
 }
 else
 {
-    // Persistencia formal relacional en PostgreSQL
+    // Persistencia formal relacional en PostgreSQL (Supabase Pooler IPv4)
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(defaultConn));
 }
@@ -94,8 +108,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Puerto por defecto de la API. Si el entorno o el despliegue define PORT/ASPNETCORE_URLS,
-// se respeta esa configuración; de lo contrario, queda fijo en 5001 para evitar conflictos.
+// Puerto por defecto de la API
 var port = builder.Configuration["PORT"] ?? Environment.GetEnvironmentVariable("PORT") ?? "5001";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
@@ -122,11 +135,10 @@ app.UseSwaggerUI(c =>
 // 3. Demás middlewares
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
-// Carga Inicial de Datos (Data Seeding)
+// Carga Inicial de Datos (Data Seeding y Migraciones)
 await DbInitializer.InitializeAsync(app.Services);
 
 app.Run();

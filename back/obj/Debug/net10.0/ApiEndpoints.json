@@ -1,7 +1,7 @@
 [
   {
     "ContainingType": "Program\u002B\u003C\u003Ec",
-    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_8",
+    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_6",
     "RelativePath": "",
     "HttpMethod": "GET",
     "IsController": false,
@@ -1910,6 +1910,27 @@
   },
   {
     "ContainingType": "back.Controllers.MateriaController",
+    "Method": "UploadRecursoFile",
+    "RelativePath": "api/Materia/{materiaId}/recursos/upload",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "archivo",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
     "Method": "GetTemasByMateria",
     "RelativePath": "api/Materia/{materiaId}/temas",
     "HttpMethod": "GET",
@@ -2159,6 +2180,27 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "back.Controllers.MateriaController",
+    "Method": "UploadRecursoFile",
+    "RelativePath": "api/materias/{materiaId}/recursos/upload",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "materiaId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "archivo",
+        "Type": "Microsoft.AspNetCore.Http.IFormFile",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "back.Controllers.MateriaController",

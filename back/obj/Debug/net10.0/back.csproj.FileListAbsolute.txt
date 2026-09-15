@@ -241,6 +241,7 @@ C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\D
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\staticwebassets.development.json
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\staticwebassets.build.endpoints.json
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\swae.build.ex.cache
+C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\back.csproj.Up2Date
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\back.dll
 C:\Users\Ryu\Documents\Jordy\Universidad\S3\Modelamiento\SIGAC\back-c\back\obj\Debug\net10.0\refint\back.dll
