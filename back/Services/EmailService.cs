@@ -57,15 +57,12 @@ namespace back.Services
             {
                 using var client = new SmtpClient(_settings.Server, _settings.Port)
                 {
-                    EnableSsl = _settings.EnableSsl,
-                    Timeout = 10000
+                    EnableSsl = true,
+                    UseDefaultCredentials = false, // OBLIGATORIO para Gmail antes de asignar credenciales
+                    Credentials = new NetworkCredential(_settings.Username, _settings.Password.Trim()),
+                    DeliveryMethod = SmtpDeliveryMethod.Network,
+                    Timeout = 15000
                 };
-
-                if (!string.IsNullOrWhiteSpace(_settings.Username) && !string.IsNullOrWhiteSpace(_settings.Password))
-                {
-                    var cleanPassword = _settings.Password.Replace(" ", "").Trim();
-                    client.Credentials = new NetworkCredential(_settings.Username.Trim(), cleanPassword);
-                }
 
                 var senderAddress = !string.IsNullOrWhiteSpace(_settings.SenderEmail) ? _settings.SenderEmail : "no-reply@uteq.edu.ec";
                 var fromAddress = new MailAddress(senderAddress, _settings.SenderName ?? "SIGAC UTEQ");
@@ -81,7 +78,7 @@ namespace back.Services
                 };
 
                 await client.SendMailAsync(mailMessage);
-                _logger.LogInformation("Correo enviado exitosamente a {ToEmail} con asunto '{Subject}'.", toEmail, subject);
+                _logger.LogInformation(">>> [SMTP Ã‰XITO] Correo de credenciales enviado a: {To}", toEmail);
                 return true;
             }
             catch (SmtpException smtpEx)

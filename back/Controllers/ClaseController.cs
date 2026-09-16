@@ -563,35 +563,42 @@ namespace back.Controllers
              };
                 _context.Inscripciones.Add(nuevaInscripcion);
 
-                var correoDestino = user.Persona?.Correo ?? user.Username;
-                var nombreEstudiante = user.Persona != null ? $"{user.Persona.Nombre} {user.Persona.Apellido}".Trim() : user.Username;
+                var correoDestino = !string.IsNullOrWhiteSpace(user.Persona?.Correo)
+                    ? user.Persona.Correo
+                    : (!string.IsNullOrWhiteSpace(user.Email) ? user.Email : (!string.IsNullOrWhiteSpace(item.Correo) ? item.Correo.Trim() : user.Username));
+
+                var nombreEstudiante = user.Persona != null
+                    ? $"{user.Persona.Nombre} {user.Persona.Apellido}".Trim()
+                    : (!string.IsNullOrWhiteSpace(user.Nombre) ? $"{user.Nombre} {user.Apellido}".Trim() : (!string.IsNullOrWhiteSpace(item.Nombre) ? $"{item.Nombre} {item.Apellido}".Trim() : user.Username));
 
                 if (isNewOrWithoutCreds && !string.IsNullOrWhiteSpace(tempPassword))
                 {
                     try
                     {
                         await _emailService.SendCredentialsAsync(correoDestino, nombreEstudiante, user.Username, tempPassword, "Estudiante");
-                        _logger.LogInformation("Credenciales despachadas por correo a {Email}", correoDestino);
+                        _logger.LogInformation(">>> [SMTP Ã‰XITO] Correo de credenciales enviado a: {To}", correoDestino);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "No se pudo enviar el correo de credenciales a {Email}", correoDestino);
                     }
                 }
-
-                try
+                else
                 {
-                    var subject = $"Inscripción a cátedra: {nombreCatedra}";
-                    var body = $"<p>Estimado/a <strong>{nombreEstudiante}</strong>,</p>" +
-                               $"<p>Has sido inscrito a la cátedra: <strong>{nombreCatedra}</strong>.</p>" +
-                               $"<p>Clase asignada: {clase.Nombre}</p>" +
-                               $"<p>Ya puedes ingresar a la plataforma SIGAC para consultar el contenido y las sesiones de clase programadas.</p>";
-                    await _emailService.SendEmailAsync(correoDestino, subject, body);
-                    _logger.LogInformation("Notificación de inscripción a cátedra {Catedra} enviada a {Email}", nombreCatedra, correoDestino);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "No se pudo enviar la notificación de inscripción por correo a {Email}", correoDestino);
+                    try
+                    {
+                        var subject = $"InscripciÃ³n a cÃ¡tedra: {nombreCatedra}";
+                        var body = $"<p>Estimado/a <strong>{nombreEstudiante}</strong>,</p>" +
+                                   $"<p>Has sido inscrito a la cÃ¡tedra: <strong>{nombreCatedra}</strong>.</p>" +
+                                   $"<p>Clase asignada: {clase.Nombre}</p>" +
+                                   $"<p>Ya puedes ingresar a la plataforma SIGAC para consultar el contenido y las sesiones de clase programadas.</p>";
+                        await _emailService.SendEmailAsync(correoDestino, subject, body);
+                        _logger.LogInformation("NotificaciÃ³n de inscripciÃ³n a cÃ¡tedra {Catedra} enviada a {Email}", nombreCatedra, correoDestino);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudo enviar la notificaciÃ³n de inscripciÃ³n por correo a {Email}", correoDestino);
+                    }
                 }
 
                 procesados.Add(new EstudianteProcesadoItem
