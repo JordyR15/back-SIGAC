@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace back.Entities
 {
@@ -12,7 +13,8 @@ namespace back.Entities
         public int MateriaId { get; set; }
 
         // Links adicionales (videos, páginas externas)
-        public List<string> Links { get; set; } = new List<string>();
+        [NotMapped]
+        public List<string>? Links { get; set; } = new();
 
         // Navigation property
         public Materia Materia { get; set; }

@@ -92,13 +92,14 @@ namespace back.Controllers
             return dto;
         }
 
-        // GET /api/Materia: Retorna todas las materias con su docente asignado (HTTP 200)
+        // GET /api/Materia: Retorna todas las materias con su docente asignado y lista de clases asociadas (HTTP 200)
         [HttpGet]
         public async Task<IActionResult> GetAllMaterias()
         {
             var materias = await _context.Materias
                 .Include(m => m.DocenteResponsable)
                     .ThenInclude(d => d.Persona)
+                .Include(m => m.Clases)
                 .ToListAsync();
 
             var catedras = await _context.Catedras
@@ -147,13 +148,21 @@ namespace back.Controllers
                     nombre = $"{m.DocenteResponsable.Persona.Nombre} {m.DocenteResponsable.Persona.Apellido}".Trim(),
                     correo = m.DocenteResponsable.Persona.Correo,
                     cedula = m.DocenteResponsable.Persona.Cedula
-                } : null
+                } : null,
+                clases = (m.Clases ?? new List<Clase>()).Select(c => new
+                {
+                    id = c.Id,
+                    claseId = c.Id,
+                    nombre = c.Nombre,
+                    materiaId = c.MateriaId,
+                    docenteId = c.DocenteId
+                }).ToList()
             }).ToList();
 
             return Ok(result);
         }
 
-        // GET /api/Materia/{id}: Retorna una materia por ID (soporta long id)
+        // GET /api/Materia/{id}: Retorna una materia por ID con su lista de clases (soporta long id)
         [HttpGet("{id}")]
         public async Task<IActionResult> GetMateriaById(long id)
         {
@@ -163,6 +172,7 @@ namespace back.Controllers
             var materia = await _context.Materias
                 .Include(m => m.DocenteResponsable)
                     .ThenInclude(d => d.Persona)
+                .Include(m => m.Clases)
                 .FirstOrDefaultAsync(m => m.Id == mId);
 
             if (materia == null)
@@ -208,13 +218,21 @@ namespace back.Controllers
                     nombre = $"{materia.DocenteResponsable.Persona.Nombre} {materia.DocenteResponsable.Persona.Apellido}".Trim(),
                     correo = materia.DocenteResponsable.Persona.Correo,
                     cedula = materia.DocenteResponsable.Persona.Cedula
-                } : null
+                } : null,
+                clases = (materia.Clases ?? new List<Clase>()).Select(c => new
+                {
+                    id = c.Id,
+                    claseId = c.Id,
+                    nombre = c.Nombre,
+                    materiaId = c.MateriaId,
+                    docenteId = c.DocenteId
+                }).ToList()
             };
 
             return Ok(result);
         }
 
-        // POST /api/Materia: Recibe DTO { nombre, codigo, descripcion, docenteId, ... }, persiste y sincroniza Catedra
+        // POST /api/Materia: Recibe DTO { nombre, codigo, descripcion, docenteId, ... }, persiste y sincroniza Catedra sin crear clases automáticamente
         [HttpPost]
         public async Task<IActionResult> CreateMateria([FromBody] JsonElement rawBody)
         {
@@ -262,20 +280,6 @@ namespace back.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            // Asegurar que exista al menos una Clase vinculada para visibilidad inmediata en el panel del Docente
-            var claseExistente = await _context.Clases.FirstOrDefaultAsync(c => c.MateriaId == materia.Id && c.DocenteId == doc.Id);
-            if (claseExistente == null)
-            {
-                var nuevaClase = new Clase
-                {
-                    Nombre = $"{materia.Nombre} - Paralelo A",
-                    MateriaId = materia.Id,
-                    DocenteId = doc.Id
-                };
-                _context.Clases.Add(nuevaClase);
-                await _context.SaveChangesAsync();
-            }
-
             var response = new
             {
                 id = materia.Id,
@@ -293,7 +297,8 @@ namespace back.Controllers
                     correo = doc.Persona.Correo,
                     cedula = doc.Persona.Cedula
                 } : null,
-                catedraId = catedra.Id
+                catedraId = catedra.Id,
+                clases = new List<object>()
             };
 
             return CreatedAtAction(nameof(GetMateriaById), new { id = materia.Id }, response);
@@ -309,6 +314,7 @@ namespace back.Controllers
             var materia = await _context.Materias
                 .Include(m => m.DocenteResponsable)
                     .ThenInclude(d => d.Persona)
+                .Include(m => m.Clases)
                 .FirstOrDefaultAsync(m => m.Id == mId);
 
             var dto = ParseMateriaDto(rawBody);
@@ -734,4 +740,3 @@ namespace back.Controllers
         }
     }
 }
-

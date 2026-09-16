@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 
 namespace back.Entities
@@ -15,6 +16,9 @@ namespace back.Entities
         [Required]
         public string Correo { get; set; }
         public string? Cedula { get; set; }
+
+        [NotMapped]
+        public string NombreCompleto => $"{Nombre} {Apellido}".Trim();
 
         // Legacy / normalized storage for roles. Use comma-separated values to support multiple roles.
         [Required]

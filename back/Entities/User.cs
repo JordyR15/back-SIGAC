@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace back.Entities
 {
@@ -11,6 +12,11 @@ namespace back.Entities
 
         // Propiedad de navegación a Persona
         public Persona Persona { get; set; }
+
+        [NotMapped]
+        public string NombreCompleto => Persona != null
+            ? Persona.NombreCompleto
+            : (!string.IsNullOrWhiteSpace(Username) ? Username : "Docente");
 
         // Colecciones para las relaciones
         public ICollection<Inscripcion> Inscripciones { get; set; } = new List<Inscripcion>();
