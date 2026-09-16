@@ -595,43 +595,149 @@ namespace back.Controllers
         // =========================================================
         // CALIFICAR ENTREGA
         // =========================================================
+       [HttpPost("actividades/calificar")]
+       public async Task<IActionResult> CalificarEntrega(
+           [FromBody] CalificarEntregaDto dto)
+       {
+           if (dto == null)
+           {
+               return BadRequest(new
+               {
+                   message = "Datos necesarios."
+               });
+           }
 
-        [HttpPost("actividades/calificar")]
-        public async Task<IActionResult> CalificarEntrega(
-            [FromBody] CalificarEntregaDto dto)
-        {
-            if (dto == null)
-                return BadRequest(
-                    "Datos necesarios.");
+           // El sistema trabaja con calificaciones de 0 a 100.
+           if (dto.Calificacion < 0 || dto.Calificacion > 100)
+           {
+               return BadRequest(new
+               {
+                   message = "La calificación debe estar entre 0 y 100."
+               });
+           }
 
-            var entrega = await _context
-                .EstudianteActividadesRealizadas
-                .FirstOrDefaultAsync(e =>
-                    e.Id == dto.EntregaId);
+           // Obtener docente autenticado.
+           var userIdClaim =
+               User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            if (entrega == null)
-                return NotFound(
-                    "Entrega no encontrada.");
+           if (!int.TryParse(userIdClaim, out var docenteId))
+           {
+               return Unauthorized(new
+               {
+                   message = "Usuario no autenticado."
+               });
+           }
 
-            entrega.Calificacion =
-                dto.Calificacion;
+           // Buscar la entrega y su actividad.
+           var entrega = await _context.EstudianteActividadesRealizadas
+               .Include(e => e.Actividad)
+               .FirstOrDefaultAsync(e => e.Id == dto.EntregaId);
 
-            entrega.Retroalimentacion =
-                dto.Retroalimentacion ??
-                string.Empty;
+           if (entrega == null)
+           {
+               return NotFound(new
+               {
+                   message = "Entrega no encontrada."
+               });
+           }
 
-            entrega.Completada = true;
+           if (entrega.Actividad == null)
+           {
+               return BadRequest(new
+               {
+                   message = "La entrega no tiene una actividad asociada."
+               });
+           }
 
-            await _context.SaveChangesAsync();
+           var materiaId = entrega.Actividad.MateriaId;
 
-            return Ok(new
-            {
-                message =
-                    "Calificación registrada correctamente.",
-                entregaId = entrega.Id,
-                calificacion = entrega.Calificacion
-            });
-        }
+           // Verificar que la materia corresponda a una clase del docente.
+           var claseIds = await _context.Clases
+               .Where(c =>
+                   c.MateriaId == materiaId &&
+                   c.DocenteId == docenteId)
+               .Select(c => c.Id)
+               .ToListAsync();
+
+           if (claseIds.Count == 0)
+           {
+               return Forbid();
+           }
+
+           // Buscar la inscripción correspondiente al estudiante.
+           var inscripcion = await _context.Inscripciones
+               .Include(i => i.Catedra)
+               .FirstOrDefaultAsync(i =>
+                   i.EstudianteId == entrega.EstudianteId &&
+                   i.ClaseId.HasValue &&
+                   claseIds.Contains(i.ClaseId.Value));
+
+           if (inscripcion == null)
+           {
+               return BadRequest(new
+               {
+                   message = "No se encontró la inscripción del estudiante para esta materia."
+               });
+           }
+
+           // Registrar la nueva calificación.
+           entrega.Calificacion = dto.Calificacion;
+           entrega.Retroalimentacion =
+               dto.Retroalimentacion ?? string.Empty;
+           entrega.Completada = true;
+
+           await _context.SaveChangesAsync();
+
+           // Obtener todas las calificaciones reales del estudiante
+           // para actividades de la misma materia.
+           var calificaciones = await _context.EstudianteActividadesRealizadas
+               .Where(e =>
+                   e.EstudianteId == entrega.EstudianteId &&
+                   e.Actividad.MateriaId == materiaId &&
+                   e.Calificacion.HasValue)
+               .Select(e => e.Calificacion!.Value)
+               .ToListAsync();
+
+           if (calificaciones.Count > 0)
+           {
+               var promedio = calificaciones.Average();
+
+               inscripcion.PromedioActual =
+                   Math.Round((double)promedio, 2);
+
+               // RF-001:
+               // activar alerta únicamente cuando ya existen calificaciones
+               // y el promedio está debajo del umbral configurado.
+               if (inscripcion.Catedra?.MinimoNota != null)
+               {
+                   inscripcion.AlertaRendimiento =
+                       inscripcion.PromedioActual <
+                       inscripcion.Catedra.MinimoNota.Value;
+               }
+               else
+               {
+                   inscripcion.AlertaRendimiento = false;
+               }
+           }
+           else
+           {
+               // Sin calificaciones no se considera al estudiante en riesgo.
+               inscripcion.PromedioActual = 0;
+               inscripcion.AlertaRendimiento = false;
+           }
+
+           await _context.SaveChangesAsync();
+
+           return Ok(new
+           {
+               message = "Calificación registrada correctamente.",
+               entregaId = entrega.Id,
+               calificacion = entrega.Calificacion,
+               promedioActual = inscripcion.PromedioActual,
+               umbral = inscripcion.Catedra?.MinimoNota,
+               alertaRendimiento = inscripcion.AlertaRendimiento
+           });
+       }
 
         // =========================================================
         // EXPEDIENTE E HISTORIAL INTEGRAL DEL ESTUDIANTE - RF-002

@@ -549,14 +549,14 @@ namespace back.Controllers
                     clase.Estudiantes.Add(user);
                 }
 
-                var nuevaInscripcion = new Inscripcion
-                {
-                    EstudianteId = user.Id,
-                    ClaseId = cId,
-                    CatedraId = catedra?.Id ?? (clase.MateriaId > 0 ? clase.MateriaId : cId),
-                    PromedioActual = 75.0,
-                    AlertaRendimiento = false
-                };
+             var nuevaInscripcion = new Inscripcion
+             {
+                 EstudianteId = user.Id,
+                 ClaseId = cId,
+                 CatedraId = catedra?.Id ?? (clase.MateriaId > 0 ? clase.MateriaId : cId),
+                 PromedioActual = 0.0,
+                 AlertaRendimiento = false
+             };
                 _context.Inscripciones.Add(nuevaInscripcion);
 
                 var correoDestino = user.Persona?.Correo ?? user.Username;
