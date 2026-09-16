@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using back.Data;
@@ -11,9 +12,11 @@ using back.Data;
 namespace back.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916143506_AddEntregaEvaluacionDiagnostica")]
+    partial class AddEntregaEvaluacionDiagnostica
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -433,11 +436,18 @@ namespace back.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AdaptadaConIA")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ArchivoDocenteUrl")
                         .HasColumnType("text");
 
                     b.Property<int>("CatedraId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("DescripcionIA")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<bool>("EsDiagnostica")
                         .HasColumnType("boolean");
@@ -454,9 +464,6 @@ namespace back.Migrations
 
                     b.Property<string>("Nombre")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("PreguntasCuestionario")
                         .HasColumnType("text");
 
                     b.Property<string>("TipoEvaluacion")

@@ -15,6 +15,7 @@ namespace back.Data
         public DbSet<Inscripcion> Inscripciones { get; set; }
         public DbSet<Evaluacion> Evaluaciones { get; set; }
         public DbSet<IndicadorCualitativo> IndicadoresCualitativos { get; set; }
+        public DbSet<ResultadoEvaluacionDiagnostica> ResultadosEvaluacionesDiagnosticas { get; set; }
         public DbSet<Ayudantia> Ayudantias { get; set; }
         public DbSet<Convocatoria> Convocatorias { get; set; }
         public DbSet<ActividadAyudantia> ActividadesAyudantia { get; set; }
@@ -207,6 +208,27 @@ namespace back.Data
 
             // Ignorar propiedad no mapeada Links en Recurso para prevenir Error 500
             modelBuilder.Entity<Recurso>().Ignore(r => r.Links);
+
+            modelBuilder.Entity<ResultadoEvaluacionDiagnostica>()
+                .HasOne(r => r.Evaluacion)
+                .WithMany()
+                .HasForeignKey(r => r.EvaluacionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ResultadoEvaluacionDiagnostica>()
+                .HasOne(r => r.Estudiante)
+                .WithMany()
+                .HasForeignKey(r => r.EstudianteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ResultadoEvaluacionDiagnostica>()
+                .HasIndex(r => new
+                {
+                    r.EvaluacionId,
+                    r.EstudianteId
+                })
+                .IsUnique();
+
         }
     }
 }

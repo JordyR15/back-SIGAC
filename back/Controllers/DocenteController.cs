@@ -258,22 +258,50 @@ namespace back.Controllers
         // =========================================================
         // OBTENER CLASES INTERNAMENTE
         // =========================================================
+       private async Task<IActionResult> GetClasesDocenteInternal(
+           long docenteId)
+       {
+           var doc = await GetDefaultDocenteAsync(docenteId);
 
-        private async Task<IActionResult> GetClasesDocenteInternal(
-            long docenteId)
-        {
-            var doc = await GetDefaultDocenteAsync(docenteId);
+           int targetDocId = doc != null
+               ? doc.Id
+               : (int)docenteId;
 
-            int targetDocId = doc != null
-                ? doc.Id
-                : (int)docenteId;
+           if (targetDocId > 0)
+           {
+               var materiasDoc = await _context.Materias
+                   .Where(m =>
+                       m.DocenteResponsableId == targetDocId)
+                   .ToListAsync();
+
+                foreach (var mat in materiasDoc)
+                {
+                    var hasClase = await _context.Clases
+                        .AnyAsync(c =>
+                            c.MateriaId == mat.Id &&
+                            c.DocenteId == targetDocId);
+
+                    if (!hasClase)
+                    {
+                        var autoClase = new Clase
+                        {
+                            Nombre = $"{mat.Nombre} - Paralelo A",
+                            MateriaId = mat.Id,
+                            DocenteId = targetDocId
+                        };
+
+                        _context.Clases.Add(autoClase);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+            }
 
             var clases = await _context.Clases
                 .Include(c => c.Materia)
                 .Include(c => c.Docente)
-                .ThenInclude(d => d.Persona)
+                    .ThenInclude(d => d.Persona)
                 .Include(c => c.Estudiantes)
-                .ThenInclude(e => e.Persona)
+                    .ThenInclude(e => e.Persona)
                 .Where(c => c.DocenteId == targetDocId)
                 .Select(c => new
                 {
@@ -282,49 +310,57 @@ namespace back.Controllers
                     nombre = c.Nombre,
                     materiaId = c.MateriaId,
 
-                    materia = c.Materia != null
-                        ? c.Materia.Nombre
-                        : "",
+                    // Cátedra real relacionada con la clase
+                    catedraId = _context.Inscripciones
+                        .Where(i => i.ClaseId == c.Id)
+                        .Select(i => (int?)i.CatedraId)
+                        .FirstOrDefault(),
 
-                    nombreMateria = c.Materia != null
-                        ? c.Materia.Nombre
-                        : "",
+                   materia = c.Materia != null
+                       ? c.Materia.Nombre
+                       : "",
 
-                    codigoMateria = c.Materia != null
-                        ? c.Materia.Codigo
-                        : "",
+                   nombreMateria = c.Materia != null
+                       ? c.Materia.Nombre
+                       : "",
 
-                    docenteId = c.DocenteId,
+                   codigoMateria = c.Materia != null
+                       ? c.Materia.Codigo
+                       : "",
 
-                    docente =
-                        c.Docente != null &&
-                        c.Docente.Persona != null
-                            ? $"{c.Docente.Persona.Nombre} {c.Docente.Persona.Apellido}".Trim()
-                            : c.Docente != null
-                                ? c.Docente.Username
-                                : "Docente",
+                   docenteId = c.DocenteId,
 
-                    docenteNombre =
-                        c.Docente != null &&
-                        c.Docente.Persona != null
-                            ? $"{c.Docente.Persona.Nombre} {c.Docente.Persona.Apellido}".Trim()
-                            : c.Docente != null
-                                ? c.Docente.Username
-                                : "Docente",
+                   docente =
+                       c.Docente != null &&
+                       c.Docente.Persona != null
+                           ? $"{c.Docente.Persona.Nombre} " +
+                             $"{c.Docente.Persona.Apellido}".Trim()
+                           : (c.Docente != null
+                               ? c.Docente.Username
+                               : "Docente"),
 
-                    docenteEmail =
-                        c.Docente != null &&
-                        c.Docente.Persona != null
-                            ? c.Docente.Persona.Correo
-                            : c.Docente != null
-                                ? c.Docente.Username
-                                : "",
+                   docenteNombre =
+                       c.Docente != null &&
+                       c.Docente.Persona != null
+                           ? $"{c.Docente.Persona.Nombre} " +
+                             $"{c.Docente.Persona.Apellido}".Trim()
+                           : (c.Docente != null
+                               ? c.Docente.Username
+                               : "Docente"),
 
-                    aula = "Aula Principal",
-                    horario = "Horario Regular",
-                    paralelo = "A",
+                   docenteEmail =
+                       c.Docente != null &&
+                       c.Docente.Persona != null
+                           ? c.Docente.Persona.Correo
+                           : (c.Docente != null
+                               ? c.Docente.Username
+                               : ""),
 
-                    estudiantesCount = c.Estudiantes.Count(e =>
+                   aula = "Aula Principal",
+                   horario = "Horario Regular",
+                   paralelo = "A",
+
+                   estudiantesCount = c.Estudiantes.Count(e =>
                         e.Persona != null &&
                         e.Persona.Rol.Contains("Estudiante")),
 
@@ -341,60 +377,66 @@ namespace back.Controllers
                             e.Persona.Rol.Contains("Estudiante"))
                         .Select(e => new
                         {
-                            id = e.Id,
-                            estudianteId = e.Id,
-                            username = e.Username,
+                           id = e.Id,
+                           estudianteId = e.Id,
+                           username = e.Username,
 
-                            nombreCompleto =
-                                e.Persona != null
-                                    ? $"{e.Persona.Nombre} {e.Persona.Apellido}".Trim()
-                                    : e.Username,
+                           nombreCompleto =
+                               e.Persona != null
+                                   ? $"{e.Persona.Nombre} " +
+                                     $"{e.Persona.Apellido}".Trim()
+                                   : e.Username,
 
-                            nombre =
-                                e.Persona != null
-                                    ? $"{e.Persona.Nombre} {e.Persona.Apellido}".Trim()
-                                    : e.Username,
+                           nombre =
+                               e.Persona != null
+                                   ? $"{e.Persona.Nombre} " +
+                                     $"{e.Persona.Apellido}".Trim()
+                                   : e.Username,
 
-                            correo =
-                                e.Persona != null
-                                    ? e.Persona.Correo
-                                    : string.Empty,
+                           correo =
+                               e.Persona != null
+                                   ? e.Persona.Correo
+                                   : string.Empty,
 
-                            cedula =
-                                e.Persona != null
-                                    ? e.Persona.Cedula ?? string.Empty
-                                    : string.Empty,
+                           cedula =
+                               e.Persona != null
+                                   ? (e.Persona.Cedula ??
+                                      string.Empty)
+                                   : string.Empty,
 
-                            catedraId = _context.Inscripciones
-                                .Where(i =>
-                                    i.ClaseId == c.Id &&
-                                    i.EstudianteId == e.Id)
-                                .Select(i => (int?)i.CatedraId)
-                                .FirstOrDefault(),
+                           // RF-001: cátedra de la inscripción
+                           catedraId = _context.Inscripciones
+                               .Where(i =>
+                                   i.ClaseId == c.Id &&
+                                   i.EstudianteId == e.Id)
+                               .Select(i => (int?)i.CatedraId)
+                               .FirstOrDefault(),
 
-                            promedioActual = _context.Inscripciones
-                                .Where(i =>
-                                    i.ClaseId == c.Id &&
-                                    i.EstudianteId == e.Id)
-                                .Select(i => (double?)i.PromedioActual)
-                                .FirstOrDefault(),
+                           // RF-001: promedio real guardado
+                           promedioActual = _context.Inscripciones
+                               .Where(i =>
+                                   i.ClaseId == c.Id &&
+                                   i.EstudianteId == e.Id)
+                               .Select(i => (double?)i.PromedioActual)
+                               .FirstOrDefault(),
 
-                            alertaRendimiento = _context.Inscripciones
-                                .Where(i =>
-                                    i.ClaseId == c.Id &&
-                                    i.EstudianteId == e.Id)
-                                .Select(i => (bool?)i.AlertaRendimiento)
-                                .FirstOrDefault()
-                        })
-                        .ToList()
-                })
-                .ToListAsync();
+                           // RF-001: alerta real guardada
+                           alertaRendimiento = _context.Inscripciones
+                               .Where(i =>
+                                   i.ClaseId == c.Id &&
+                                   i.EstudianteId == e.Id)
+                               .Select(i => (bool?)i.AlertaRendimiento)
+                               .FirstOrDefault()
+                       })
+                       .ToList()
+               })
+               .ToListAsync();
 
-            return Ok(
-                clases
-                    .DistinctBy(c => c.id)
-                    .ToList());
-        }
+           return Ok(
+               clases
+                   .DistinctBy(c => c.id)
+                   .ToList());
+       }
 
         private async Task<IActionResult> GetAllClasesForAdminInternal()
         {
@@ -529,31 +571,607 @@ namespace back.Controllers
         // EVALUACIÃ“N DIAGNÃ“STICA
         // =========================================================
 
-        [HttpPost("catedras/{catedraId}/evaluacion-diagnostica")]
-        public async Task<IActionResult> RegistrarEvaluacionDiagnostica(
-            int catedraId,
-            [FromBody] EvaluacionDto evaluacionDto)
-        {
-            var evaluacion = new Evaluacion
-            {
-                Nombre = evaluacionDto.Nombre,
-                CatedraId = catedraId,
-                EsDiagnostica = true,
-                AdaptadaConIA = false
-            };
+       // =========================================================
+       // RF-004 - EVALUACIÓN DIAGNÓSTICA
+       // =========================================================
 
-            _context.Evaluaciones.Add(evaluacion);
-            await _context.SaveChangesAsync();
+       [HttpPost("catedras/{catedraId}/evaluacion-diagnostica")]
+       public async Task<IActionResult> RegistrarEvaluacionDiagnostica(
+           int catedraId,
+           [FromBody] EvaluacionDto evaluacionDto)
+       {
+           if (evaluacionDto == null)
+           {
+               return BadRequest(new
+               {
+                   message = "Los datos de la evaluación son obligatorios."
+               });
+           }
 
-            evaluacionDto.Id = evaluacion.Id;
-            evaluacionDto.CatedraId = catedraId;
-            evaluacionDto.EsDiagnostica = true;
+           if (string.IsNullOrWhiteSpace(evaluacionDto.Nombre))
+           {
+               return BadRequest(new
+               {
+                   message = "El nombre de la evaluación es obligatorio."
+               });
+           }
 
-            return CreatedAtAction(
-                nameof(RegistrarEvaluacionDiagnostica),
-                new { id = evaluacion.Id },
-                evaluacionDto);
-        }
+           if (!evaluacionDto.FechaInicio.HasValue)
+           {
+               return BadRequest(new
+               {
+                   message = "La fecha de inicio es obligatoria."
+               });
+           }
+
+           if (!evaluacionDto.FechaFin.HasValue)
+           {
+               return BadRequest(new
+               {
+                   message = "La fecha de finalización es obligatoria."
+               });
+           }
+
+           if (evaluacionDto.FechaFin.Value <=
+               evaluacionDto.FechaInicio.Value)
+           {
+               return BadRequest(new
+               {
+                   message =
+                       "La fecha de finalización debe ser posterior a la fecha de inicio."
+               });
+           }
+
+           var tipoEvaluacion =
+               evaluacionDto.TipoEvaluacion?.Trim();
+
+           if (string.IsNullOrWhiteSpace(tipoEvaluacion))
+           {
+               return BadRequest(new
+               {
+                   message = "Debes seleccionar el tipo de evaluación."
+               });
+           }
+
+           var tiposValidos = new[]
+           {
+               "Archivo",
+               "Cuestionario"
+           };
+
+           var tipoNormalizado =
+               tiposValidos.FirstOrDefault(t =>
+                   t.Equals(
+                       tipoEvaluacion,
+                       System.StringComparison.OrdinalIgnoreCase));
+
+           if (tipoNormalizado == null)
+           {
+               return BadRequest(new
+               {
+                   message =
+                       "El tipo de evaluación debe ser Archivo o Cuestionario."
+               });
+           }
+
+           if (tipoNormalizado == "Cuestionario" &&
+               string.IsNullOrWhiteSpace(evaluacionDto.PreguntasCuestionario))
+           {
+               return BadRequest(new
+               {
+                   message = "Debes agregar al menos una pregunta al cuestionario."
+               });
+           }
+
+           var userIdClaim =
+               User.FindFirst(
+                   ClaimTypes.NameIdentifier)?.Value;
+
+           if (!int.TryParse(userIdClaim, out var docenteId))
+           {
+               return Unauthorized(new
+               {
+                   message = "Usuario no autenticado."
+               });
+           }
+
+           var catedra =
+               await _context.Catedras
+                   .FirstOrDefaultAsync(c =>
+                       c.Id == catedraId);
+
+           if (catedra == null)
+           {
+               return NotFound(new
+               {
+                   message = "La cátedra indicada no existe."
+               });
+           }
+
+           if (catedra.DocenteId != docenteId)
+           {
+               return Forbid();
+           }
+
+           var evaluacion = new Evaluacion
+           {
+               Nombre =
+                   evaluacionDto.Nombre.Trim(),
+
+               CatedraId =
+                   catedraId,
+
+               EsDiagnostica =
+                   true,
+
+               FechaInicio =
+                   evaluacionDto.FechaInicio,
+
+               FechaFin =
+                   evaluacionDto.FechaFin,
+
+               TipoEvaluacion =
+                   tipoNormalizado,
+
+               Instrucciones =
+                   evaluacionDto.Instrucciones?.Trim()
+                   ?? string.Empty,
+
+               ArchivoDocenteUrl =
+                   string.IsNullOrWhiteSpace(
+                       evaluacionDto.ArchivoDocenteUrl)
+                       ? null
+                       : evaluacionDto.ArchivoDocenteUrl.Trim(),
+
+               PreguntasCuestionario =
+                   tipoNormalizado == "Cuestionario"
+                       ? evaluacionDto.PreguntasCuestionario
+                       : null
+           };
+
+           _context.Evaluaciones.Add(evaluacion);
+
+           await _context.SaveChangesAsync();
+
+           var respuesta = new EvaluacionDto
+           {
+               Id =
+                   evaluacion.Id,
+
+               Nombre =
+                   evaluacion.Nombre,
+
+               CatedraId =
+                   evaluacion.CatedraId,
+
+               EsDiagnostica =
+                   true,
+
+               FechaInicio =
+                   evaluacion.FechaInicio,
+
+               FechaFin =
+                   evaluacion.FechaFin,
+
+               TipoEvaluacion =
+                   evaluacion.TipoEvaluacion,
+
+               Instrucciones =
+                   evaluacion.Instrucciones,
+
+               ArchivoDocenteUrl =
+                   evaluacion.ArchivoDocenteUrl,
+
+               PreguntasCuestionario =
+                   evaluacion.PreguntasCuestionario
+           };
+
+           return StatusCode(
+               StatusCodes.Status201Created,
+               respuesta);
+       }
+
+
+       // GET /api/Docente/catedras/{catedraId}/evaluaciones-diagnosticas
+       [HttpGet("catedras/{catedraId}/evaluaciones-diagnosticas")]
+       public async Task<IActionResult> ObtenerEvaluacionesDiagnosticas(
+           int catedraId)
+       {
+           var userIdClaim =
+               User.FindFirst(
+                   ClaimTypes.NameIdentifier)?.Value;
+
+           if (!int.TryParse(userIdClaim, out var docenteId))
+           {
+               return Unauthorized(new
+               {
+                   message = "Usuario no autenticado."
+               });
+           }
+
+           var catedra =
+               await _context.Catedras
+                   .FirstOrDefaultAsync(c =>
+                       c.Id == catedraId);
+
+           if (catedra == null)
+           {
+               return NotFound(new
+               {
+                   message = "La cátedra indicada no existe."
+               });
+           }
+
+           if (catedra.DocenteId != docenteId)
+           {
+               return Forbid();
+           }
+
+           var evaluaciones =
+               await _context.Evaluaciones
+                   .Where(e =>
+                       e.CatedraId == catedraId &&
+                       e.EsDiagnostica)
+                   .OrderByDescending(e => e.Id)
+                   .Select(e => new EvaluacionDto
+                   {
+                       Id = e.Id,
+
+                       Nombre = e.Nombre,
+
+                       CatedraId = e.CatedraId,
+
+                       EsDiagnostica = e.EsDiagnostica,
+
+                       FechaInicio = e.FechaInicio,
+
+                       FechaFin = e.FechaFin,
+
+                       TipoEvaluacion = e.TipoEvaluacion,
+
+                       Instrucciones = e.Instrucciones,
+
+                       ArchivoDocenteUrl =
+                           e.ArchivoDocenteUrl,
+
+                       PreguntasCuestionario =
+                           e.PreguntasCuestionario
+                   })
+                   .ToListAsync();
+
+           return Ok(evaluaciones);
+       }
+
+
+
+       // POST /api/Docente/catedras/{catedraId}/evaluaciones-diagnosticas/{evaluacionId}/resultados
+       [HttpPost(
+           "catedras/{catedraId}/evaluaciones-diagnosticas/{evaluacionId}/resultados")]
+       public async Task<IActionResult> GuardarResultadosEvaluacionDiagnostica(
+           int catedraId,
+           int evaluacionId,
+           [FromBody] RegistrarResultadosDiagnosticosDto dto)
+       {
+           var userIdClaim =
+               User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+           if (!int.TryParse(userIdClaim, out var docenteId))
+           {
+               return Unauthorized(new
+               {
+                   message = "Usuario no autenticado."
+               });
+           }
+
+           var catedra = await _context.Catedras
+               .FirstOrDefaultAsync(c => c.Id == catedraId);
+
+           if (catedra == null)
+           {
+               return NotFound(new
+               {
+                   message = "Cátedra no encontrada."
+               });
+           }
+
+           if (catedra.DocenteId != docenteId)
+           {
+               return Forbid();
+           }
+
+           var evaluacion = await _context.Evaluaciones
+               .FirstOrDefaultAsync(e =>
+                   e.Id == evaluacionId &&
+                   e.CatedraId == catedraId &&
+                   e.EsDiagnostica);
+
+           if (evaluacion == null)
+           {
+               return NotFound(new
+               {
+                   message = "Evaluación diagnóstica no encontrada."
+               });
+           }
+
+           if (dto == null ||
+               dto.Resultados == null ||
+               dto.Resultados.Count == 0)
+           {
+               return BadRequest(new
+               {
+                   message = "Debe registrar al menos un resultado."
+               });
+           }
+
+           var estudiantesDuplicados = dto.Resultados
+               .GroupBy(r => r.EstudianteId)
+               .Where(g => g.Count() > 1)
+               .Select(g => g.Key)
+               .ToList();
+
+           if (estudiantesDuplicados.Count > 0)
+           {
+               return BadRequest(new
+               {
+                   message =
+                       "No se puede registrar dos veces al mismo estudiante."
+               });
+           }
+
+           foreach (var resultado in dto.Resultados)
+           {
+               if (resultado.Calificacion.HasValue &&
+                   (resultado.Calificacion.Value < 0 ||
+                    resultado.Calificacion.Value > 10))
+               {
+                   return BadRequest(new
+                   {
+                       message =
+                           "Las calificaciones deben estar entre 0 y 10."
+                   });
+               }
+
+               var estaInscrito =
+                   await _context.Inscripciones
+                       .AnyAsync(i =>
+                           i.EstudianteId ==
+                           resultado.EstudianteId &&
+                           i.CatedraId == catedraId);
+
+               if (!estaInscrito)
+               {
+                   return BadRequest(new
+                   {
+                       message =
+                           $"El estudiante {resultado.EstudianteId} no está inscrito en la cátedra."
+                   });
+               }
+
+               var resultadoExistente =
+                   await _context.ResultadosEvaluacionesDiagnosticas
+                       .FirstOrDefaultAsync(r =>
+                           r.EvaluacionId == evaluacionId &&
+                           r.EstudianteId ==
+                           resultado.EstudianteId);
+
+               if (resultadoExistente == null)
+               {
+                   var nuevoResultado =
+                       new ResultadoEvaluacionDiagnostica
+                       {
+                           EvaluacionId = evaluacionId,
+                           EstudianteId =
+                               resultado.EstudianteId,
+                           Calificacion =
+                               resultado.Calificacion,
+                           Observacion =
+                               resultado.Observacion?.Trim()
+                               ?? string.Empty,
+                           Estado =
+                               resultado.Calificacion.HasValue
+                                   ? "Calificado"
+                                   : "Pendiente",
+                           FechaRegistro =
+                               System.DateTime.UtcNow
+                       };
+
+                   _context
+                       .ResultadosEvaluacionesDiagnosticas
+                       .Add(nuevoResultado);
+               }
+               else
+               {
+                   resultadoExistente.Calificacion =
+                       resultado.Calificacion;
+
+                   resultadoExistente.Observacion =
+                       resultado.Observacion?.Trim()
+                       ?? string.Empty;
+
+                   resultadoExistente.Estado =
+                       resultado.Calificacion.HasValue
+                           ? "Calificado"
+                           : resultadoExistente.Estado;
+
+                   resultadoExistente.FechaRegistro =
+                       System.DateTime.UtcNow;
+               }
+           }
+
+           await _context.SaveChangesAsync();
+
+           var resultadosGuardados =
+               await _context.ResultadosEvaluacionesDiagnosticas
+                   .Where(r =>
+                       r.EvaluacionId == evaluacionId)
+                   .ToListAsync();
+
+         var calificacionesValidas = resultadosGuardados
+             .Where(r => r.Calificacion.HasValue)
+             .Select(r => r.Calificacion!.Value)
+             .ToList();
+
+         var promedio = calificacionesValidas.Count > 0
+             ? calificacionesValidas.Average()
+             : 0;
+
+           return Ok(new
+           {
+               message =
+                   "Resultados diagnósticos registrados correctamente.",
+
+               evaluacionId,
+
+              estudiantesEvaluados =
+                  calificacionesValidas.Count,
+
+              promedioDiagnostico =
+                  System.Math.Round(promedio, 2),
+
+              calificacionMinima =
+                  calificacionesValidas.Count > 0
+                      ? calificacionesValidas.Min()
+                      : 0,
+
+              calificacionMaxima =
+                  calificacionesValidas.Count > 0
+                      ? calificacionesValidas.Max()
+                      : 0,
+
+              afectaPromedioAcademico = false
+           });
+       }
+
+       // GET /api/Docente/catedras/{catedraId}/evaluaciones-diagnosticas/{evaluacionId}/resultados
+       [HttpGet(
+           "catedras/{catedraId}/evaluaciones-diagnosticas/{evaluacionId}/resultados")]
+       public async Task<IActionResult> ObtenerResultadosEvaluacionDiagnostica(
+           int catedraId,
+           int evaluacionId)
+       {
+           var userIdClaim =
+               User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+           if (!int.TryParse(userIdClaim, out var docenteId))
+           {
+               return Unauthorized(new
+               {
+                   message = "Usuario no autenticado."
+               });
+           }
+
+           var catedra = await _context.Catedras
+               .FirstOrDefaultAsync(c => c.Id == catedraId);
+
+           if (catedra == null)
+           {
+               return NotFound(new
+               {
+                   message = "Cátedra no encontrada."
+               });
+           }
+
+           if (catedra.DocenteId != docenteId)
+           {
+               return Forbid();
+           }
+
+           var evaluacion = await _context.Evaluaciones
+               .FirstOrDefaultAsync(e =>
+                   e.Id == evaluacionId &&
+                   e.CatedraId == catedraId &&
+                   e.EsDiagnostica);
+
+           if (evaluacion == null)
+           {
+               return NotFound(new
+               {
+                   message = "Evaluación diagnóstica no encontrada."
+               });
+           }
+
+           var resultados =
+               await _context.ResultadosEvaluacionesDiagnosticas
+                   .Where(r =>
+                       r.EvaluacionId == evaluacionId)
+                   .Include(r => r.Estudiante)
+                       .ThenInclude(e => e.Persona)
+                   .OrderBy(r =>
+                       r.Estudiante.Persona != null
+                           ? r.Estudiante.Persona.Apellido
+                           : r.Estudiante.Username)
+                   .Select(r =>
+                       new ResultadoEvaluacionDiagnosticaDto
+                       {
+                           Id = r.Id,
+                           EvaluacionId = r.EvaluacionId,
+                           EstudianteId = r.EstudianteId,
+
+                           NombreEstudiante =
+                               r.Estudiante.Persona != null
+                                   ? $"{r.Estudiante.Persona.Nombre} {r.Estudiante.Persona.Apellido}".Trim()
+                                   : r.Estudiante.Username,
+
+                           Calificacion = r.Calificacion,
+                           Observacion = r.Observacion,
+                           ArchivoEntregaUrl = r.ArchivoEntregaUrl,
+                           FechaEntrega = r.FechaEntrega,
+                           Estado = r.Estado,
+                           RespuestasCuestionario =
+                               r.RespuestasCuestionario,
+                           FechaRegistro = r.FechaRegistro
+                       })
+                   .ToListAsync();
+
+           var calificacionesValidas = resultados
+               .Where(r => r.Calificacion.HasValue)
+               .Select(r => r.Calificacion!.Value)
+               .ToList();
+
+           var promedio = calificacionesValidas.Count > 0
+               ? calificacionesValidas.Average()
+               : 0;
+
+           return Ok(new
+           {
+               evaluacion = new
+               {
+                   evaluacion.Id,
+                   evaluacion.Nombre,
+                   evaluacion.CatedraId,
+                   evaluacion.EsDiagnostica,
+                   evaluacion.FechaInicio,
+                   evaluacion.FechaFin,
+                   evaluacion.TipoEvaluacion,
+                   evaluacion.Instrucciones,
+                   evaluacion.ArchivoDocenteUrl,
+                   evaluacion.PreguntasCuestionario
+               },
+
+               resultados,
+
+               resumen = new
+               {
+                   estudiantesEvaluados =
+                       calificacionesValidas.Count,
+
+                   promedioDiagnostico =
+                       System.Math.Round(promedio, 2),
+
+                   calificacionMinima =
+                       calificacionesValidas.Count > 0
+                           ? calificacionesValidas.Min()
+                           : 0,
+
+                   calificacionMaxima =
+                       calificacionesValidas.Count > 0
+                           ? calificacionesValidas.Max()
+                           : 0,
+
+                   afectaPromedioAcademico = false
+               }
+           });
+       }
 
         // =========================================================
         // CRONOGRAMA

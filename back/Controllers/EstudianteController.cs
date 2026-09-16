@@ -373,6 +373,620 @@ namespace back.Controllers
             });
         }
 
+
+        // =========================================================
+        // RF-004 - EVALUACIONES DIAGNÓSTICAS DEL ESTUDIANTE
+        // =========================================================
+
+        // GET /api/Estudiante/evaluaciones-diagnosticas
+        // Lista únicamente las evaluaciones diagnósticas de las
+        // cátedras en las que está inscrito el estudiante autenticado.
+        [HttpGet("evaluaciones-diagnosticas")]
+        public async Task<IActionResult> GetMisEvaluacionesDiagnosticas()
+        {
+            if (EstudianteId == null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Usuario no autenticado."
+                });
+            }
+
+            var estudianteId = EstudianteId.Value;
+
+            var catedraIds = await _context.Inscripciones
+                .Where(i => i.EstudianteId == estudianteId)
+                .Select(i => i.CatedraId)
+                .Distinct()
+                .ToListAsync();
+
+            if (catedraIds.Count == 0)
+            {
+                return Ok(new List<object>());
+            }
+
+            var evaluaciones = await _context.Evaluaciones
+                .AsNoTracking()
+                .Include(e => e.Catedra)
+                .Where(e =>
+                    e.EsDiagnostica &&
+                    catedraIds.Contains(e.CatedraId))
+                .OrderByDescending(e => e.FechaInicio)
+                .ThenByDescending(e => e.Id)
+                .ToListAsync();
+
+            var evaluacionIds = evaluaciones
+                .Select(e => e.Id)
+                .ToList();
+
+            var resultados = await _context.ResultadosEvaluacionesDiagnosticas
+                .AsNoTracking()
+                .Where(r =>
+                    r.EstudianteId == estudianteId &&
+                    evaluacionIds.Contains(r.EvaluacionId))
+                .ToListAsync();
+
+            var ahora = DateTime.UtcNow;
+
+            var respuesta = evaluaciones
+                .Select(e =>
+                {
+                    var resultado = resultados
+                        .FirstOrDefault(r =>
+                            r.EvaluacionId == e.Id);
+
+                    string disponibilidad;
+
+                    if (!e.FechaInicio.HasValue ||
+                        !e.FechaFin.HasValue)
+                    {
+                        disponibilidad = "SinFechas";
+                    }
+                    else if (ahora < e.FechaInicio.Value)
+                    {
+                        disponibilidad = "NoIniciada";
+                    }
+                    else if (ahora > e.FechaFin.Value)
+                    {
+                        disponibilidad = "Cerrada";
+                    }
+                    else
+                    {
+                        disponibilidad = "Disponible";
+                    }
+
+                    var estadoEntrega =
+                        resultado?.Estado ?? "Pendiente";
+
+                    var yaCalificada =
+                        string.Equals(
+                            estadoEntrega,
+                            "Calificado",
+                            StringComparison.OrdinalIgnoreCase);
+
+                    return new
+                    {
+                        id = e.Id,
+                        evaluacionId = e.Id,
+                        catedraId = e.CatedraId,
+                        catedra =
+                            e.Catedra != null
+                                ? e.Catedra.Nombre
+                                : string.Empty,
+                        nombre = e.Nombre,
+                        instrucciones = e.Instrucciones,
+                        tipoEvaluacion = e.TipoEvaluacion,
+                        fechaInicio = e.FechaInicio,
+                        fechaFin = e.FechaFin,
+                        archivoDocenteUrl = e.ArchivoDocenteUrl,
+                        preguntasCuestionario = e.PreguntasCuestionario,
+
+                        disponibilidad,
+                        puedeRealizar =
+                            disponibilidad == "Disponible" &&
+                            !yaCalificada,
+
+                        estadoEntrega,
+                        fechaEntrega =
+                            resultado?.FechaEntrega,
+                        archivoEntregaUrl =
+                            resultado?.ArchivoEntregaUrl,
+
+                        calificacion =
+                            resultado?.Calificacion,
+
+                        observacion =
+                            resultado?.Observacion
+                            ?? string.Empty,
+
+                        respuestasCuestionario =
+                            resultado?.RespuestasCuestionario
+                    };
+                })
+                .ToList();
+
+            return Ok(respuesta);
+        }
+
+
+        // POST /api/Estudiante/evaluaciones-diagnosticas/{evaluacionId}/entregar-archivo
+        // Recibe PDF, Word, ZIP o imagen.
+        // La evaluación diagnóstica NO modifica el promedio académico.
+        [HttpPost(
+            "evaluaciones-diagnosticas/{evaluacionId}/entregar-archivo")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> EntregarEvaluacionDiagnosticaArchivo(
+            int evaluacionId,
+            IFormFile archivo)
+        {
+            if (EstudianteId == null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Usuario no autenticado."
+                });
+            }
+
+            if (archivo == null || archivo.Length == 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Debe adjuntar un archivo."
+                });
+            }
+
+            var estudianteId = EstudianteId.Value;
+
+            var evaluacion = await _context.Evaluaciones
+                .FirstOrDefaultAsync(e =>
+                    e.Id == evaluacionId &&
+                    e.EsDiagnostica);
+
+            if (evaluacion == null)
+            {
+                return NotFound(new
+                {
+                    message =
+                        "Evaluación diagnóstica no encontrada."
+                });
+            }
+
+            var estaInscrito =
+                await _context.Inscripciones
+                    .AnyAsync(i =>
+                        i.EstudianteId == estudianteId &&
+                        i.CatedraId ==
+                        evaluacion.CatedraId);
+
+            if (!estaInscrito)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        message =
+                            "No estás inscrito en la cátedra de esta evaluación."
+                    });
+            }
+
+            if (!string.Equals(
+                    evaluacion.TipoEvaluacion?.Trim(),
+                    "Archivo",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Esta evaluación diagnóstica no es de tipo Archivo."
+                });
+            }
+
+            if (!evaluacion.FechaInicio.HasValue ||
+                !evaluacion.FechaFin.HasValue)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "La evaluación diagnóstica no tiene un rango de fechas válido."
+                });
+            }
+
+            var ahora = DateTime.UtcNow;
+
+            if (ahora < evaluacion.FechaInicio.Value)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "La evaluación diagnóstica todavía no está disponible."
+                });
+            }
+
+            if (ahora > evaluacion.FechaFin.Value)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "El plazo para entregar esta evaluación diagnóstica ha finalizado."
+                });
+            }
+
+            var extensionesPermitidas = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                ".pdf",
+                ".doc",
+                ".docx",
+                ".zip",
+                ".png",
+                ".jpg",
+                ".jpeg"
+            };
+
+            var nombreSeguro =
+                Path.GetFileName(archivo.FileName);
+
+            var extension =
+                Path.GetExtension(nombreSeguro);
+
+            if (string.IsNullOrWhiteSpace(extension) ||
+                !extensionesPermitidas.Contains(extension))
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Formato no permitido. Usa PDF, Word, ZIP, PNG, JPG o JPEG."
+                });
+            }
+
+            var resultadoExistente =
+                await _context.ResultadosEvaluacionesDiagnosticas
+                    .FirstOrDefaultAsync(r =>
+                        r.EvaluacionId == evaluacionId &&
+                        r.EstudianteId == estudianteId);
+
+            if (resultadoExistente != null &&
+                string.Equals(
+                    resultadoExistente.Estado,
+                    "Calificado",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new
+                {
+                    message =
+                        "La evaluación ya fue calificada y no puede volver a entregarse."
+                });
+            }
+
+            var uploadsFolder = Path.Combine(
+                Directory.GetCurrentDirectory(),
+                "wwwroot",
+                "uploads",
+                "diagnosticas",
+                $"evaluacion-{evaluacionId}",
+                $"estudiante-{estudianteId}");
+
+            Directory.CreateDirectory(uploadsFolder);
+
+            var nombreArchivo =
+                $"{Guid.NewGuid():N}_{nombreSeguro}";
+
+            var filePath =
+                Path.Combine(
+                    uploadsFolder,
+                    nombreArchivo);
+
+            await using (var stream =
+                new FileStream(
+                    filePath,
+                    FileMode.Create))
+            {
+                await archivo.CopyToAsync(stream);
+            }
+
+            var archivoUrl =
+                $"/uploads/diagnosticas/" +
+                $"evaluacion-{evaluacionId}/" +
+                $"estudiante-{estudianteId}/" +
+                $"{nombreArchivo}";
+
+            if (resultadoExistente == null)
+            {
+                resultadoExistente =
+                    new ResultadoEvaluacionDiagnostica
+                    {
+                        EvaluacionId =
+                            evaluacionId,
+
+                        EstudianteId =
+                            estudianteId,
+
+                        Calificacion =
+                            null,
+
+                        Observacion =
+                            string.Empty,
+
+                        ArchivoEntregaUrl =
+                            archivoUrl,
+
+                        FechaEntrega =
+                            ahora,
+
+                        Estado =
+                            "Entregado",
+
+                        RespuestasCuestionario =
+                            null,
+
+                        FechaRegistro =
+                            ahora
+                    };
+
+                _context
+                    .ResultadosEvaluacionesDiagnosticas
+                    .Add(resultadoExistente);
+            }
+            else
+            {
+                resultadoExistente.ArchivoEntregaUrl =
+                    archivoUrl;
+
+                resultadoExistente.FechaEntrega =
+                    ahora;
+
+                resultadoExistente.Estado =
+                    "Entregado";
+
+                resultadoExistente.Calificacion =
+                    null;
+
+                resultadoExistente
+                    .RespuestasCuestionario =
+                    null;
+
+                resultadoExistente.FechaRegistro =
+                    ahora;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message =
+                    "Evaluación diagnóstica entregada correctamente.",
+
+                evaluacionId,
+
+                estado =
+                    resultadoExistente.Estado,
+
+                fechaEntrega =
+                    resultadoExistente.FechaEntrega,
+
+                archivoUrl =
+                    resultadoExistente.ArchivoEntregaUrl,
+
+                afectaPromedioAcademico =
+                    false
+            });
+        }
+
+
+        // POST /api/Estudiante/evaluaciones-diagnosticas/{evaluacionId}/entregar-cuestionario
+        // Guarda las respuestas del cuestionario diagnóstico.
+        // La evaluación diagnóstica NO modifica el promedio académico.
+        [HttpPost(
+            "evaluaciones-diagnosticas/{evaluacionId}/entregar-cuestionario")]
+        public async Task<IActionResult> EntregarEvaluacionDiagnosticaCuestionario(
+            int evaluacionId,
+            [FromBody] System.Text.Json.JsonElement respuestas)
+        {
+            if (EstudianteId == null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Usuario no autenticado."
+                });
+            }
+
+            if (respuestas.ValueKind !=
+                    System.Text.Json.JsonValueKind.Array ||
+                respuestas.GetArrayLength() == 0)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Debes responder al menos una pregunta del cuestionario."
+                });
+            }
+
+            var estudianteId = EstudianteId.Value;
+
+            var evaluacion = await _context.Evaluaciones
+                .FirstOrDefaultAsync(e =>
+                    e.Id == evaluacionId &&
+                    e.EsDiagnostica);
+
+            if (evaluacion == null)
+            {
+                return NotFound(new
+                {
+                    message =
+                        "Evaluación diagnóstica no encontrada."
+                });
+            }
+
+            var estaInscrito =
+                await _context.Inscripciones
+                    .AnyAsync(i =>
+                        i.EstudianteId == estudianteId &&
+                        i.CatedraId ==
+                        evaluacion.CatedraId);
+
+            if (!estaInscrito)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        message =
+                            "No estás inscrito en la cátedra de esta evaluación."
+                    });
+            }
+
+            if (!string.Equals(
+                    evaluacion.TipoEvaluacion?.Trim(),
+                    "Cuestionario",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Esta evaluación diagnóstica no es de tipo Cuestionario."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    evaluacion.PreguntasCuestionario))
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "El cuestionario no tiene preguntas configuradas."
+                });
+            }
+
+            if (!evaluacion.FechaInicio.HasValue ||
+                !evaluacion.FechaFin.HasValue)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "La evaluación diagnóstica no tiene un rango de fechas válido."
+                });
+            }
+
+            var ahora = DateTime.UtcNow;
+
+            if (ahora < evaluacion.FechaInicio.Value)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "La evaluación diagnóstica todavía no está disponible."
+                });
+            }
+
+            if (ahora > evaluacion.FechaFin.Value)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "El plazo para responder esta evaluación diagnóstica ha finalizado."
+                });
+            }
+
+            var resultadoExistente =
+                await _context.ResultadosEvaluacionesDiagnosticas
+                    .FirstOrDefaultAsync(r =>
+                        r.EvaluacionId == evaluacionId &&
+                        r.EstudianteId == estudianteId);
+
+            if (resultadoExistente != null &&
+                string.Equals(
+                    resultadoExistente.Estado,
+                    "Calificado",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new
+                {
+                    message =
+                        "La evaluación ya fue calificada y no puede volver a responderse."
+                });
+            }
+
+            var respuestasJson = respuestas.GetRawText();
+
+            if (resultadoExistente == null)
+            {
+                resultadoExistente =
+                    new ResultadoEvaluacionDiagnostica
+                    {
+                        EvaluacionId =
+                            evaluacionId,
+
+                        EstudianteId =
+                            estudianteId,
+
+                        Calificacion =
+                            null,
+
+                        Observacion =
+                            string.Empty,
+
+                        ArchivoEntregaUrl =
+                            null,
+
+                        FechaEntrega =
+                            ahora,
+
+                        Estado =
+                            "Entregado",
+
+                        RespuestasCuestionario =
+                            respuestasJson,
+
+                        FechaRegistro =
+                            ahora
+                    };
+
+                _context
+                    .ResultadosEvaluacionesDiagnosticas
+                    .Add(resultadoExistente);
+            }
+            else
+            {
+                resultadoExistente.ArchivoEntregaUrl =
+                    null;
+
+                resultadoExistente.FechaEntrega =
+                    ahora;
+
+                resultadoExistente.Estado =
+                    "Entregado";
+
+                resultadoExistente.Calificacion =
+                    null;
+
+                resultadoExistente.RespuestasCuestionario =
+                    respuestasJson;
+
+                resultadoExistente.FechaRegistro =
+                    ahora;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message =
+                    "Cuestionario diagnóstico entregado correctamente.",
+
+                evaluacionId,
+
+                estado =
+                    resultadoExistente.Estado,
+
+                fechaEntrega =
+                    resultadoExistente.FechaEntrega,
+
+                afectaPromedioAcademico =
+                    false
+            });
+        }
+
+
         [HttpPost("actividades/{actividadId}/entregar")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> EntregarActividad(int actividadId, IFormFile archivo)
