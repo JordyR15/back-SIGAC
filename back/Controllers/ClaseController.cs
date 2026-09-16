@@ -772,27 +772,33 @@ namespace back.Controllers
             return (null, false, null);
         }
 
-        // Endpoint para obtener los estudiantes de una clase (docentes de la clase o estudiantes de la clase)
+        // Endpoint para obtener los estudiantes de una clase (docentes de la clase o estudiantes de la clase o administrador)
         [HttpGet("{claseId}/estudiantes")]
-        public async Task<ActionResult<IEnumerable<UserDto>>> GetEstudiantesFromClase(long claseId)
+        [HttpGet("/api/Clase/{claseId}/estudiantes")]
+        [HttpGet("/api/clases/{claseId}/estudiantes")]
+        [HttpGet("/api/Docente/clases/{claseId}/estudiantes")]
+        public async Task<IActionResult> GetEstudiantesFromClase(long claseId)
         {
             if (UserId == null) return Unauthorized();
 
-            if (claseId > int.MaxValue) return Ok(new List<UserDto>());
+            if (claseId > int.MaxValue) return Ok(new List<object>());
             int cId = (int)claseId;
 
             var clase = await _context.Clases
                                 .Include(c => c.Estudiantes)
+                                    .ThenInclude(e => e.Persona)
                                 .AsNoTracking()
                                 .FirstOrDefaultAsync(c => c.Id == cId);
 
             if (clase == null) return NotFound(new { message = "Clase no encontrada." });
 
+            var userRol = User.FindFirst(ClaimTypes.Role)?.Value;
+            var isAdmin = userRol == "Administrador" || User.IsInRole("Administrador") || User.IsInRole("Coordinador");
             var isDocente = clase.DocenteId == UserId.Value;
             var isStudent = clase.Estudiantes.Any(e => e.Id == UserId.Value) ||
                             await _context.Inscripciones.AnyAsync(i => i.EstudianteId == UserId.Value && i.ClaseId == cId);
 
-            if (!isDocente && !isStudent)
+            if (!isDocente && !isStudent && !isAdmin)
             {
                 return Forbid("No tienes permiso para ver los estudiantes de esta clase.");
             }
@@ -801,17 +807,24 @@ namespace back.Controllers
             var estudiantesFromInscripciones = await _context.Inscripciones
                 .Where(i => i.ClaseId == cId)
                 .Include(i => i.Estudiante)
+                    .ThenInclude(e => e.Persona)
                 .Select(i => i.Estudiante)
                 .ToListAsync();
 
             var estudiantesDto = estudiantesFromClase
                 .Concat(estudiantesFromInscripciones)
-                .Where(e => e != null)
-                .DistinctBy(e => e.Id)
-                .Select(e => new UserDto
+                .Where(u => u != null)
+                .DistinctBy(u => u.Id)
+                .Select(u => new
                 {
-                    Id = e.Id,
-                    Username = e.Username
+                    id = u.Id,
+                    username = u.Username,
+                    nombre = u.Nombre,
+                    apellido = u.Apellido,
+                    nombreCompleto = $"{u.Nombre} {u.Apellido}".Trim(),
+                    correo = u.Email,
+                    email = u.Email,
+                    cedula = u.Persona != null ? u.Persona.Cedula : (u.Cedula ?? "")
                 }).ToList();
 
             return Ok(estudiantesDto);

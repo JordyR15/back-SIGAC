@@ -18,6 +18,41 @@ namespace back.Entities
             ? Persona.NombreCompleto
             : (!string.IsNullOrWhiteSpace(Username) ? Username : "Docente");
 
+        [NotMapped]
+        public string? Nombre
+        {
+            get => Persona?.Nombre;
+            set { if (Persona != null && value != null) Persona.Nombre = value; }
+        }
+
+        [NotMapped]
+        public string? Apellido
+        {
+            get => Persona?.Apellido;
+            set { if (Persona != null && value != null) Persona.Apellido = value; }
+        }
+
+        [NotMapped]
+        public string? Email
+        {
+            get => Persona?.Correo;
+            set { if (Persona != null && value != null) Persona.Correo = value; }
+        }
+
+        [NotMapped]
+        public string? Correo
+        {
+            get => Persona?.Correo;
+            set { if (Persona != null && value != null) Persona.Correo = value; }
+        }
+
+        [NotMapped]
+        public string? Cedula
+        {
+            get => Persona?.Cedula;
+            set { if (Persona != null && value != null) Persona.Cedula = value; }
+        }
+
         // Colecciones para las relaciones
         public ICollection<Inscripcion> Inscripciones { get; set; } = new List<Inscripcion>();
         public ICollection<Catedra> CatedrasDocente { get; set; } = new List<Catedra>();

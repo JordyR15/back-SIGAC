@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace back.Entities
 {
@@ -8,6 +9,9 @@ namespace back.Entities
         public string Nombre { get; set; } // e.g., "Modelamiento 2023-2"
         public int MateriaId { get; set; }
         public int DocenteId { get; set; } // El docente específico a cargo de esta instancia de clase
+
+        [NotMapped]
+        public int? CatedraId => MateriaId > 0 ? MateriaId : null;
 
         // Navigation properties
         public Materia Materia { get; set; }

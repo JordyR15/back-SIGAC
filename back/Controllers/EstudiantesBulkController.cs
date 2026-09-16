@@ -9,12 +9,14 @@ using System.Threading.Tasks;
 using back.Data;
 using back.DTOs;
 using back.Entities;
+using back.Services;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace back.Controllers
 {
@@ -25,11 +27,19 @@ namespace back.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
+        private readonly IEmailService _emailService;
+        private readonly ILogger<EstudiantesBulkController> _logger;
 
-        public EstudiantesBulkController(AppDbContext context, IConfiguration config)
+        public EstudiantesBulkController(
+            AppDbContext context,
+            IConfiguration config,
+            IEmailService emailService,
+            ILogger<EstudiantesBulkController> logger)
         {
             _context = context;
             _config = config;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         // GET /api/estudiantes/template -> descarga CSV plantilla
@@ -96,20 +106,31 @@ namespace back.Controllers
         // POST /api/estudiantes/bulk-upload (multipart/form-data file)
         // Allowed caller roles: Administrador, Decano, Coordinador, Docente
         [HttpPost("bulk-upload")]
-        public async Task<ActionResult<BulkUploadResultDto>> BulkUpload(IFormFile file)
+        public async Task<ActionResult<BulkUploadResultDto>> BulkUpload(IFormFile file, [FromQuery] long? claseId = null)
         {
             var callerRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
             var allowed = new[] { "Administrador", "Decano", "Coordinador", "Docente" };
             if (!allowed.Any(r => string.Equals(r, callerRole, StringComparison.OrdinalIgnoreCase)))
+            {
                 return Forbid("No autorizado para subir estudiantes en bloque.");
+            }
 
             if (file == null || file.Length == 0) return BadRequest("Archivo requerido.");
+
+            long? targetClaseId = claseId;
+            if (!targetClaseId.HasValue && Request.HasFormContentType && Request.Form.TryGetValue("claseId", out var formClaseIdVal))
+            {
+                if (long.TryParse(formClaseIdVal, out var parsedClaseId))
+                {
+                    targetClaseId = parsedClaseId;
+                }
+            }
 
             var result = new BulkUploadResultDto();
 
             try
             {
-                List<(string Nombres, string Apellidos, string Cedula, string Correo)> rows = new();
+                List<(string Nombres, string Apellidos, string Cedula, string Correo, string? Username)> rows = new();
 
                 using (var stream = file.OpenReadStream())
                 {
@@ -117,13 +138,14 @@ namespace back.Controllers
                     {
                         using var reader = new StreamReader(stream, Encoding.UTF8);
                         var header = await reader.ReadLineAsync();
-                        while (!reader.EndOfStream)
+                        string? line;
+                        while ((line = await reader.ReadLineAsync()) != null)
                         {
-                            var line = await reader.ReadLineAsync();
                             if (string.IsNullOrWhiteSpace(line)) continue;
                             var parts = line.Split(',');
                             if (parts.Length < 4) { result.Errors.Add($"Línea inválida: {line}"); continue; }
-                            rows.Add((parts[0].Trim(), parts[1].Trim(), parts[2].Trim(), parts[3].Trim()));
+                            var uVal = parts.Length > 4 ? parts[4].Trim() : null;
+                            rows.Add((parts[0].Trim(), parts[1].Trim(), parts[2].Trim(), parts[3].Trim(), string.IsNullOrWhiteSpace(uVal) ? null : uVal));
                         }
                     }
                     else // assume Excel (.xlsx)
@@ -140,6 +162,7 @@ namespace back.Controllers
                             var apellidos = ws.Cell(r, 2).GetString();
                             var cedula = ws.Cell(r, 3).GetString();
                             var correo = ws.Cell(r, 4).GetString();
+                            var uVal = ws.Cell(r, 5).GetString();
 
                             if (string.IsNullOrWhiteSpace(nombres) || string.IsNullOrWhiteSpace(apellidos) || string.IsNullOrWhiteSpace(cedula))
                             {
@@ -147,7 +170,7 @@ namespace back.Controllers
                                 continue;
                             }
 
-                            rows.Add((nombres.Trim(), apellidos.Trim(), cedula.Trim(), correo?.Trim() ?? string.Empty));
+                            rows.Add((nombres.Trim(), apellidos.Trim(), cedula.Trim(), correo?.Trim() ?? string.Empty, string.IsNullOrWhiteSpace(uVal) ? null : uVal.Trim()));
                         }
                     }
                 }
@@ -167,26 +190,45 @@ namespace back.Controllers
                 var callerIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 int.TryParse(callerIdStr, out var callerUserId);
 
-                var importJob = new Entities.ImportJob
+                var job = new Entities.ImportJob
                 {
-                    CreatedByUserId = callerUserId,
                     CreatedAt = DateTime.UtcNow,
-                    FileName = file.FileName
+                    CreatedByUserId = callerUserId,
+                    FileName = file.FileName,
+                    ResultFileName = $"{Path.GetFileNameWithoutExtension(file.FileName)}_resultado.csv",
+                    CreatedCount = 0,
+                    ErrorCount = 0
                 };
 
-                _context.ImportJobs.Add(importJob);
+                _context.ImportJobs.Add(job);
                 await _context.SaveChangesAsync(); // get job id
 
+                Clase? targetClase = null;
+                if (targetClaseId.HasValue && targetClaseId.Value > 0)
+                {
+                    targetClase = await _context.Clases
+                        .Include(c => c.Estudiantes)
+                        .FirstOrDefaultAsync(c => c.Id == (int)targetClaseId.Value);
+                }
 
                 foreach (var row in rows)
                 {
+                    var u = row.Username;
+                    var correo = row.Correo;
+                    var initialUsername = !string.IsNullOrEmpty(u) ? u : (correo ?? "").Split('@')[0];
+                    if (string.IsNullOrWhiteSpace(initialUsername))
+                    {
+                        initialUsername = !string.IsNullOrWhiteSpace(row.Cedula) ? row.Cedula : $"estudiante_{Guid.NewGuid().ToString("N")[..6]}";
+                    }
+
                     var entry = new Entities.ImportJobEntry
                     {
-                        ImportJobId = importJob.Id,
+                        ImportJobId = job.Id,
                         Nombres = row.Nombres,
                         Apellidos = row.Apellidos,
                         Cedula = row.Cedula,
-                        Correo = row.Correo
+                        Correo = row.Correo,
+                        Username = initialUsername
                     };
 
                     try
@@ -197,7 +239,7 @@ namespace back.Controllers
                         {
                             entry.Success = false;
                             entry.ErrorMessage = "Cédula inválida o demasiado corta.";
-                            importJob.Entries.Add(entry);
+                            job.Entries.Add(entry);
                             _context.ImportJobEntries.Add(entry);
                             await _context.SaveChangesAsync();
                             continue;
@@ -208,7 +250,7 @@ namespace back.Controllers
                         {
                             entry.Success = false;
                             entry.ErrorMessage = "Correo vacío.";
-                            importJob.Entries.Add(entry);
+                            job.Entries.Add(entry);
                             _context.ImportJobEntries.Add(entry);
                             await _context.SaveChangesAsync();
                             continue;
@@ -222,8 +264,8 @@ namespace back.Controllers
                             if (allowedDomains.Length > 0 && !allowedDomains.Contains(domain))
                             {
                                 entry.Success = false;
-                                entry.ErrorMessage = $"Dominio de correo no permitido ({domain}).";
-                                importJob.Entries.Add(entry);
+                                entry.ErrorMessage = $"Dominio de correo '{domain}' no permitido.";
+                                job.Entries.Add(entry);
                                 _context.ImportJobEntries.Add(entry);
                                 await _context.SaveChangesAsync();
                                 continue;
@@ -232,112 +274,214 @@ namespace back.Controllers
                         catch
                         {
                             entry.Success = false;
-                            entry.ErrorMessage = $"Correo inválido ({row.Correo}).";
-                            importJob.Entries.Add(entry);
+                            entry.ErrorMessage = "Formato de correo inválido.";
+                            job.Entries.Add(entry);
                             _context.ImportJobEntries.Add(entry);
                             await _context.SaveChangesAsync();
                             continue;
                         }
 
-                        var usernameBase = GenerateUsername(row.Nombres, row.Apellidos);
-                        var username = await MakeUniqueUsernameAsync(usernameBase);
+                        // Check if student already exists by cedula or email
+                        User? estudiante = null;
+                        var existingPersona = await _context.Personas
+                            .Include(p => p.User)
+                            .FirstOrDefaultAsync(p => p.Cedula == cedulaNormalized || p.Correo.ToLower() == row.Correo.ToLower());
 
-                        // Password temporary = cedula normalized
-                        var tempPassword = cedulaNormalized;
-
-                        using var hmac = new HMACSHA512();
-                        var user = new User
+                        if (existingPersona != null && existingPersona.User != null)
                         {
-                            Username = username,
-                            PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(tempPassword)),
-                            PasswordSalt = hmac.Key
-                        };
-
-                        _context.Users.Add(user);
-                        await _context.SaveChangesAsync(); // need Id for persona
-
-                        var persona = new Persona
+                            estudiante = existingPersona.User;
+                        }
+                        else
                         {
-                            Nombre = row.Nombres,
-                            Apellido = row.Apellidos,
-                            Correo = row.Correo,
-                            Rol = "Estudiante",
-                            UserId = user.Id
-                        };
-
-                        _context.Personas.Add(persona);
-                        await _context.SaveChangesAsync();
-
-                        // Send email if SMTP configured
-                        var emailSent = false;
-                        try
-                        {
-                            var smtpHost = _config["Smtp:Host"];
-                            if (!string.IsNullOrWhiteSpace(smtpHost))
+                            var existingUser = await _context.Users
+                                .Include(u => u.Persona)
+                                .FirstOrDefaultAsync(u => u.Username.ToLower() == row.Correo.ToLower());
+                            if (existingUser != null)
                             {
-                                var smtpPort = int.TryParse(_config["Smtp:Port"], out var p) ? p : 25;
-                                var smtpUser = _config["Smtp:User"];
-                                var smtpPass = _config["Smtp:Pass"];
-                                var from = _config["Smtp:From"] ?? "no-reply@example.com";
-
-                                using var client = new SmtpClient(smtpHost, smtpPort)
-                                {
-                                    EnableSsl = bool.TryParse(_config["Smtp:EnableSsl"], out var s) && s
-                                };
-
-                                if (!string.IsNullOrEmpty(smtpUser)) client.Credentials = new System.Net.NetworkCredential(smtpUser, smtpPass);
-
-                                var mail = new MailMessage(from, persona.Correo)
-                                {
-                                    Subject = "Cuenta creada - Credenciales",
-                                    Body = $"Hola {persona.Nombre},\n\nSe ha creado tu cuenta.\nUsuario: {username}\nContraseña temporal: {tempPassword}\nPor favor cambia la contraseña en tu primer inicio de sesión.\n\nSaludos.",
-                                    IsBodyHtml = false
-                                };
-
-                                await client.SendMailAsync(mail);
-                                emailSent = true;
+                                estudiante = existingUser;
                             }
                         }
-                        catch (Exception ex)
+
+                        bool isNew = false;
+                        var emailSent = false;
+                        string username = string.Empty;
+
+                        if (estudiante == null)
                         {
-                            // don't fail entire process if email fails
-                            entry.ErrorMessage = $"Fallo al enviar email: {ex.Message}";
+                            isNew = true;
+                            var usernameBase = !string.IsNullOrWhiteSpace(u)
+                                ? u.Trim().ToLowerInvariant()
+                                : (!string.IsNullOrWhiteSpace(row.Correo) && row.Correo.Contains('@') ? row.Correo.Split('@')[0].ToLowerInvariant() : GenerateUsername(row.Nombres, row.Apellidos));
+                            username = await MakeUniqueUsernameAsync(usernameBase);
+                            initialUsername = username;
+
+                            // Clave temporal institucional: Uteq.XXXXXX! con 6 dígitos aleatorios
+                            var tempPassword = $"Uteq.{RandomNumberGenerator.GetInt32(100000, 999999)}!";
+
+                            using var hmac = new HMACSHA512();
+                            var user = new User
+                            {
+                                Username = username,
+                                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(tempPassword)),
+                                PasswordSalt = hmac.Key
+                            };
+
+                            _context.Users.Add(user);
+                            await _context.SaveChangesAsync(); // need Id for persona
+
+                            var persona = new Persona
+                            {
+                                Nombre = row.Nombres,
+                                Apellido = row.Apellidos,
+                                Cedula = cedulaNormalized,
+                                Correo = row.Correo,
+                                Rol = "Estudiante",
+                                UserId = user.Id,
+                                User = user
+                            };
+
+                            _context.Personas.Add(persona);
+                            user.Persona = persona;
+                            user.Cedula = cedulaNormalized;
+                            user.Email = row.Correo;
+                            user.Correo = row.Correo;
+                            await _context.SaveChangesAsync();
+
+                            estudiante = user;
+
+                            // Despacho de Correos SMTP en Carga Masiva
+                            try
+                            {
+                                await _emailService.SendCredentialsAsync(
+                                    row.Correo,
+                                    $"{row.Nombres} {row.Apellidos}".Trim(),
+                                    initialUsername,
+                                    tempPassword,
+                                    "Estudiante"
+                                );
+                                emailSent = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error al enviar correo a {Correo}", row.Correo);
+                            }
+                        }
+                        else
+                        {
+                            username = estudiante.Username;
+                            initialUsername = username;
+
+                            if (estudiante.Persona == null)
+                            {
+                                var persona = new Persona
+                                {
+                                    Nombre = row.Nombres,
+                                    Apellido = row.Apellidos,
+                                    Cedula = cedulaNormalized,
+                                    Correo = row.Correo,
+                                    Rol = "Estudiante",
+                                    UserId = estudiante.Id,
+                                    User = estudiante
+                                };
+                                estudiante.Persona = persona;
+                                estudiante.Cedula = cedulaNormalized;
+                                estudiante.Email = row.Correo;
+                                estudiante.Correo = row.Correo;
+                                _context.Personas.Add(persona);
+                                await _context.SaveChangesAsync();
+                            }
+                            else
+                            {
+                                bool updated = false;
+                                if (string.IsNullOrWhiteSpace(estudiante.Persona.Cedula) && !string.IsNullOrWhiteSpace(cedulaNormalized))
+                                {
+                                    estudiante.Persona.Cedula = cedulaNormalized;
+                                    estudiante.Cedula = cedulaNormalized;
+                                    updated = true;
+                                }
+                                if (string.IsNullOrWhiteSpace(estudiante.Persona.Correo) && !string.IsNullOrWhiteSpace(row.Correo))
+                                {
+                                    estudiante.Persona.Correo = row.Correo;
+                                    estudiante.Email = row.Correo;
+                                    estudiante.Correo = row.Correo;
+                                    updated = true;
+                                }
+                                if (updated)
+                                {
+                                    await _context.SaveChangesAsync();
+                                }
+                            }
+                        }
+
+                        // Vincular Estudiantes a la Clase
+                        if (targetClaseId.HasValue && targetClaseId.Value > 0)
+                        {
+                            var clase = targetClase;
+                            if (!await _context.Inscripciones.AnyAsync(i => i.EstudianteId == estudiante.Id && i.ClaseId == (int)targetClaseId.Value))
+                            {
+                                int? catedraVal = null;
+                                if (clase != null && clase.CatedraId.HasValue && await _context.Catedras.AnyAsync(c => c.Id == clase.CatedraId.Value))
+                                {
+                                    catedraVal = clase.CatedraId.Value;
+                                }
+                                else
+                                {
+                                    catedraVal = await _context.Catedras.Select(c => (int?)c.Id).FirstOrDefaultAsync();
+                                }
+
+                                var inscripcion = new Inscripcion
+                                {
+                                    EstudianteId = estudiante.Id,
+                                    ClaseId = (int)targetClaseId.Value,
+                                    CatedraId = catedraVal,
+                                    PromedioActual = 0,
+                                    AlertaRendimiento = false
+                                };
+                                _context.Inscripciones.Add(inscripcion);
+                            }
+
+                            if (targetClase != null && !targetClase.Estudiantes.Any(e => e.Id == estudiante.Id))
+                            {
+                                targetClase.Estudiantes.Add(estudiante);
+                            }
+
+                            await _context.SaveChangesAsync();
                         }
 
                         entry.Success = true;
-                        entry.Username = username;
-                        importJob.Entries.Add(entry);
+                        entry.Username = initialUsername;
+                        job.Entries.Add(entry);
                         _context.ImportJobEntries.Add(entry);
                         await _context.SaveChangesAsync();
 
                         result.CreatedCount++;
-                        result.CreatedUsernames.Add(username + (emailSent ? " (email sent)" : " (no email)"));
+                        result.CreatedUsernames.Add(username + (isNew ? (emailSent ? " (email sent)" : " (no email)") : " (existente)"));
                     }
                     catch (Exception exRow)
                     {
                         entry.Success = false;
                         entry.ErrorMessage = exRow.Message;
-                        importJob.Entries.Add(entry);
+                        job.Entries.Add(entry);
                         _context.ImportJobEntries.Add(entry);
                         await _context.SaveChangesAsync();
                     }
                 }
 
                 // finalize importJob counts and write CSV results
-                importJob.CreatedCount = importJob.Entries.Count(e => e.Success);
-                importJob.ErrorCount = importJob.Entries.Count(e => !e.Success);
+                job.CreatedCount = job.Entries.Count(e => e.Success);
+                job.ErrorCount = job.Entries.Count(e => !e.Success);
 
                 var outputDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "import-results");
                 if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
 
-                var resultFileName = $"import_{importJob.Id}.csv";
+                var resultFileName = $"import_{job.Id}.csv";
                 var resultPath = Path.Combine(outputDir, resultFileName);
 
                 using (var sw = new StreamWriter(resultPath, false, Encoding.UTF8))
                 {
                     // headers
                     sw.WriteLine("nombres,apellidos,cedula,correo,username,success,error");
-                    foreach (var e in importJob.Entries)
+                    foreach (var e in job.Entries)
                     {
                         var line = string.Format("\"{0}\",\"{1}\",\"{2}\",\"{3}\",\"{4}\",{5},\"{6}\"",
                             e.Nombres?.Replace("\"", "\"\"") ?? string.Empty,
@@ -351,11 +495,11 @@ namespace back.Controllers
                     }
                 }
 
-                importJob.ResultFileName = Path.Combine("import-results", resultFileName);
+                job.ResultFileName = Path.Combine("import-results", resultFileName);
                 await _context.SaveChangesAsync();
 
-                result.CreatedCount = importJob.CreatedCount;
-                result.Errors.AddRange(importJob.Entries.Where(e => !e.Success).Select(e => $"{e.Nombres} {e.Apellidos}: {e.ErrorMessage}"));
+                result.CreatedCount = job.CreatedCount;
+                result.Errors.AddRange(job.Entries.Where(e => !e.Success).Select(e => $"{e.Nombres} {e.Apellidos}: {e.ErrorMessage}"));
 
                 return Ok(result);
             }

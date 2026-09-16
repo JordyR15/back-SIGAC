@@ -50,7 +50,7 @@ namespace back.Controllers
             var catedra = await _context.Catedras.FindAsync(dto.CatedraId);
 
             if (catedra == null)
-                return NotFound("Cátedra no encontrada.");
+                return NotFound("CÃ¡tedra no encontrada.");
 
             var convocatoria = new Convocatoria
             {
@@ -131,6 +131,7 @@ namespace back.Controllers
 
         // GET /api/Docente/clases
         [HttpGet("clases")]
+        [Authorize(Roles = "Docente,Administrador")]
         public async Task<IActionResult> GetClasesDocenteLogueado()
         {
             var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -143,11 +144,11 @@ namespace back.Controllers
                 });
             }
 
-            var docente = await _context.Users
+            var user = await _context.Users
                 .Include(u => u.Persona)
                 .FirstOrDefaultAsync(u => u.Id == userId);
 
-            if (docente == null)
+            if (user == null)
             {
                 return Unauthorized(new
                 {
@@ -155,27 +156,44 @@ namespace back.Controllers
                 });
             }
 
-            var roles = docente.Persona?.GetRoles()
+            var roles = user.Persona?.GetRoles()
                         ?? new List<string>();
 
-            var esDocente = roles.Any(r =>
-                r.Equals(
-                    "Docente",
-                    System.StringComparison.OrdinalIgnoreCase) ||
-                r.Equals(
-                    "Profesor",
-                    System.StringComparison.OrdinalIgnoreCase));
+            var callerRoleClaim = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+            var esAdmin = User.IsInRole("Administrador") ||
+                          callerRoleClaim.Equals("Administrador", System.StringComparison.OrdinalIgnoreCase) ||
+                          roles.Any(r => r.Equals("Administrador", System.StringComparison.OrdinalIgnoreCase));
+
+            if (esAdmin)
+            {
+                return await GetAllClasesForAdminInternal();
+            }
+
+            var esDocente = User.IsInRole("Docente") ||
+                roles.Any(r =>
+                    r.Equals(
+                        "Docente",
+                        System.StringComparison.OrdinalIgnoreCase) ||
+                    r.Equals(
+                        "Profesor",
+                        System.StringComparison.OrdinalIgnoreCase));
 
             if (!esDocente)
                 return Forbid();
 
-            return await GetClasesDocenteInternal(docente.Id);
+            return await GetClasesDocenteInternal(user.Id);
         }
 
         // GET /api/Docente/{id}/clases
         [HttpGet("{id}/clases")]
+        [Authorize(Roles = "Docente,Administrador")]
         public async Task<IActionResult> GetClasesDocentePorId(long id)
         {
+            var callerRoleClaim = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+            if (id == 0 && (User.IsInRole("Administrador") || callerRoleClaim.Equals("Administrador", System.StringComparison.OrdinalIgnoreCase)))
+            {
+                return await GetAllClasesForAdminInternal();
+            }
             return await GetClasesDocenteInternal(id);
         }
 
@@ -220,7 +238,7 @@ namespace back.Controllers
                     id = c.Id,
                     nombre = c.Nombre,
                     codigo = $"CAT-{c.Id}",
-                    descripcion = "Cátedra",
+                    descripcion = "CÃ¡tedra",
                     docenteId = c.DocenteId,
                     nombreDocente =
                         c.Docente != null &&
@@ -407,8 +425,137 @@ namespace back.Controllers
                     .ToList());
         }
 
+        private async Task<IActionResult> GetAllClasesForAdminInternal()
+        {
+            var clases = await _context.Clases
+                .Include(c => c.Materia)
+                .Include(c => c.Docente)
+                .ThenInclude(d => d.Persona)
+                .Include(c => c.Estudiantes)
+                .ThenInclude(e => e.Persona)
+                .Select(c => new
+                {
+                    id = c.Id,
+                    claseId = c.Id,
+                    nombre = c.Nombre,
+                    materiaId = c.MateriaId,
+
+                    materia = c.Materia != null
+                        ? c.Materia.Nombre
+                        : "",
+
+                    nombreMateria = c.Materia != null
+                        ? c.Materia.Nombre
+                        : "",
+
+                    codigoMateria = c.Materia != null
+                        ? c.Materia.Codigo
+                        : "",
+
+                    docenteId = c.DocenteId,
+
+                    docente =
+                        c.Docente != null &&
+                        c.Docente.Persona != null
+                            ? $"{c.Docente.Persona.Nombre} {c.Docente.Persona.Apellido}".Trim()
+                            : c.Docente != null
+                                ? c.Docente.Username
+                                : "Docente",
+
+                    docenteNombre =
+                        c.Docente != null &&
+                        c.Docente.Persona != null
+                            ? $"{c.Docente.Persona.Nombre} {c.Docente.Persona.Apellido}".Trim()
+                            : c.Docente != null
+                                ? c.Docente.Username
+                                : "Docente",
+
+                    docenteEmail =
+                        c.Docente != null &&
+                        c.Docente.Persona != null
+                            ? c.Docente.Persona.Correo
+                            : c.Docente != null
+                                ? c.Docente.Username
+                                : "",
+
+                    aula = "Aula Principal",
+                    horario = "Horario Regular",
+                    paralelo = "A",
+
+                    estudiantesCount = c.Estudiantes.Count(e =>
+                        e.Persona != null &&
+                        e.Persona.Rol.Contains("Estudiante")),
+
+                    estudianteIds = c.Estudiantes
+                        .Where(e =>
+                            e.Persona != null &&
+                            e.Persona.Rol.Contains("Estudiante"))
+                        .Select(e => e.Id)
+                        .ToList(),
+
+                    estudiantes = c.Estudiantes
+                        .Where(e =>
+                            e.Persona != null &&
+                            e.Persona.Rol.Contains("Estudiante"))
+                        .Select(e => new
+                        {
+                            id = e.Id,
+                            estudianteId = e.Id,
+                            username = e.Username,
+
+                            nombreCompleto =
+                                e.Persona != null
+                                    ? $"{e.Persona.Nombre} {e.Persona.Apellido}".Trim()
+                                    : e.Username,
+
+                            nombre =
+                                e.Persona != null
+                                    ? $"{e.Persona.Nombre} {e.Persona.Apellido}".Trim()
+                                    : e.Username,
+
+                            correo =
+                                e.Persona != null
+                                    ? e.Persona.Correo
+                                    : string.Empty,
+
+                            cedula =
+                                e.Persona != null
+                                    ? e.Persona.Cedula ?? string.Empty
+                                    : string.Empty,
+
+                            catedraId = _context.Inscripciones
+                                .Where(i =>
+                                    i.ClaseId == c.Id &&
+                                    i.EstudianteId == e.Id)
+                                .Select(i => (int?)i.CatedraId)
+                                .FirstOrDefault(),
+
+                            promedioActual = _context.Inscripciones
+                                .Where(i =>
+                                    i.ClaseId == c.Id &&
+                                    i.EstudianteId == e.Id)
+                                .Select(i => (double?)i.PromedioActual)
+                                .FirstOrDefault(),
+
+                            alertaRendimiento = _context.Inscripciones
+                                .Where(i =>
+                                    i.ClaseId == c.Id &&
+                                    i.EstudianteId == e.Id)
+                                .Select(i => (bool?)i.AlertaRendimiento)
+                                .FirstOrDefault()
+                        })
+                        .ToList()
+                })
+                .ToListAsync();
+
+            return Ok(
+                clases
+                    .DistinctBy(c => c.id)
+                    .ToList());
+        }
+
         // =========================================================
-        // EVALUACIÓN DIAGNÓSTICA
+        // EVALUACIÃ“N DIAGNÃ“STICA
         // =========================================================
 
         [HttpPost("catedras/{catedraId}/evaluacion-diagnostica")]
@@ -466,7 +613,7 @@ namespace back.Controllers
         }
 
         // =========================================================
-        // PLANIFICACIÓN DE AYUDANTÍAS
+        // PLANIFICACIÃ“N DE AYUDANTÃAS
         // =========================================================
 
         [HttpPost("ayudantias/{ayudantiaId}/planificacion")]
@@ -494,7 +641,7 @@ namespace back.Controllers
         }
 
         // =========================================================
-        // MONITOREO DE AYUDANTÍA
+        // MONITOREO DE AYUDANTÃA
         // =========================================================
 
         [HttpGet("ayudantias/{ayudantiaId}/monitoreo")]
@@ -510,7 +657,7 @@ namespace back.Controllers
 
             if (ayudantia == null)
                 return NotFound(
-                    "Ayudantía no encontrada.");
+                    "AyudantÃ­a no encontrada.");
 
             var monitoreoDto = new MonitoreoAyudantiaDto
             {
@@ -612,7 +759,7 @@ namespace back.Controllers
            {
                return BadRequest(new
                {
-                   message = "La calificación debe estar entre 0 y 100."
+                   message = "La calificaciÃ³n debe estar entre 0 y 100."
                });
            }
 
@@ -664,7 +811,7 @@ namespace back.Controllers
                return Forbid();
            }
 
-           // Buscar la inscripción correspondiente al estudiante.
+           // Buscar la inscripciÃ³n correspondiente al estudiante.
            var inscripcion = await _context.Inscripciones
                .Include(i => i.Catedra)
                .FirstOrDefaultAsync(i =>
@@ -676,11 +823,11 @@ namespace back.Controllers
            {
                return BadRequest(new
                {
-                   message = "No se encontró la inscripción del estudiante para esta materia."
+                   message = "No se encontrÃ³ la inscripciÃ³n del estudiante para esta materia."
                });
            }
 
-           // Registrar la nueva calificación.
+           // Registrar la nueva calificaciÃ³n.
            entrega.Calificacion = dto.Calificacion;
            entrega.Retroalimentacion =
                dto.Retroalimentacion ?? string.Empty;
@@ -706,8 +853,8 @@ namespace back.Controllers
                    Math.Round((double)promedio, 2);
 
                // RF-001:
-               // activar alerta únicamente cuando ya existen calificaciones
-               // y el promedio está debajo del umbral configurado.
+               // activar alerta Ãºnicamente cuando ya existen calificaciones
+               // y el promedio estÃ¡ debajo del umbral configurado.
                if (inscripcion.Catedra?.MinimoNota != null)
                {
                    inscripcion.AlertaRendimiento =
@@ -730,7 +877,7 @@ namespace back.Controllers
 
            return Ok(new
            {
-               message = "Calificación registrada correctamente.",
+               message = "CalificaciÃ³n registrada correctamente.",
                entregaId = entrega.Id,
                calificacion = entrega.Calificacion,
                promedioActual = inscripcion.PromedioActual,
@@ -744,6 +891,7 @@ namespace back.Controllers
         // =========================================================
 
         // GET /api/Docente/estudiantes/{estudianteId}/expediente
+        [Authorize(Roles = "Docente,Administrador,Coordinador")]
         [HttpGet("estudiantes/{estudianteId}/expediente")]
         public async Task<IActionResult> ObtenerExpedienteEstudiante(
             int estudianteId)
@@ -791,7 +939,14 @@ namespace back.Controllers
                         "Profesor",
                         System.StringComparison.OrdinalIgnoreCase));
 
-            if (!esDocente)
+            var esAdminOCoordinador =
+                rolesDocente.Any(r =>
+                    r.Equals("Administrador", System.StringComparison.OrdinalIgnoreCase) ||
+                    r.Equals("Coordinador", System.StringComparison.OrdinalIgnoreCase)) ||
+                User.IsInRole("Administrador") ||
+                User.IsInRole("Coordinador");
+
+            if (!esDocente && !esAdminOCoordinador)
                 return Forbid();
 
             var estudiante =
@@ -828,7 +983,7 @@ namespace back.Controllers
                 });
             }
 
-            var tieneAcceso = await (
+            var tieneAcceso = esAdminOCoordinador || await (
                 from inscripcion in _context.Inscripciones
                 join catedra in _context.Catedras
                     on inscripcion.CatedraId equals catedra.Id
@@ -924,14 +1079,17 @@ namespace back.Controllers
         }
 
         // =========================================================
-        // CÁTEDRAS DEL ESTUDIANTE
+        // CÃTEDRAS DEL ESTUDIANTE
         // =========================================================
 
         // GET /api/Docente/estudiantes/{estudianteId}/catedras
+        [Authorize(Roles = "Docente,Administrador,Coordinador")]
         [HttpGet("estudiantes/{estudianteId}/catedras")]
         public async Task<IActionResult> ObtenerCatedrasEstudiante(
-            int estudianteId)
+            int estudianteId, [FromRoute] int? id = null)
         {
+            var targetEstudianteId = id.HasValue && id.Value > 0 ? id.Value : estudianteId;
+
             var userIdClaim =
                 User.FindFirst(
                     ClaimTypes.NameIdentifier)?.Value;
@@ -975,14 +1133,21 @@ namespace back.Controllers
                         "Profesor",
                         System.StringComparison.OrdinalIgnoreCase));
 
-            if (!esDocente)
+            var esAdminOCoordinador =
+                roles.Any(r =>
+                    r.Equals("Administrador", System.StringComparison.OrdinalIgnoreCase) ||
+                    r.Equals("Coordinador", System.StringComparison.OrdinalIgnoreCase)) ||
+                User.IsInRole("Administrador") ||
+                User.IsInRole("Coordinador");
+
+            if (!esDocente && !esAdminOCoordinador)
                 return Forbid();
 
             var estudiante =
                 await _context.Users
                     .Include(u => u.Persona)
                     .FirstOrDefaultAsync(u =>
-                        u.Id == estudianteId);
+                        u.Id == targetEstudianteId);
 
             if (estudiante == null)
             {
@@ -1012,13 +1177,18 @@ namespace back.Controllers
                 });
             }
 
+            var query = _context.Catedras.AsQueryable();
+            if (!esAdminOCoordinador)
+            {
+                query = query.Where(c => c.DocenteId == docenteId);
+            }
+
             var catedras =
-                await _context.Catedras
+                await query
                     .Where(c =>
-                        c.DocenteId == docenteId &&
                         c.Inscripciones.Any(i =>
                             i.EstudianteId ==
-                            estudianteId))
+                            targetEstudianteId))
                     .Select(c => new
                     {
                         id = c.Id,
@@ -1098,7 +1268,7 @@ namespace back.Controllers
                 return NotFound(new
                 {
                     message =
-                        "Cátedra no encontrada."
+                        "CÃ¡tedra no encontrada."
                 });
             }
 
@@ -1114,7 +1284,7 @@ namespace back.Controllers
                 return BadRequest(new
                 {
                     message =
-                        "Indicador y Observación son requeridos."
+                        "Indicador y ObservaciÃ³n son requeridos."
                 });
             }
 
@@ -1124,9 +1294,9 @@ namespace back.Controllers
             var indicadoresValidos =
                 new[]
                 {
-                    "Interés",
-                    "Participación",
-                    "Desempeño"
+                    "InterÃ©s",
+                    "ParticipaciÃ³n",
+                    "DesempeÃ±o"
                 };
 
             var indicadorNormalizado =
@@ -1141,7 +1311,7 @@ namespace back.Controllers
                 return BadRequest(new
                 {
                     message =
-                        "Indicador no válido. Debe ser: Interés, Participación o Desempeño."
+                        "Indicador no vÃ¡lido. Debe ser: InterÃ©s, ParticipaciÃ³n o DesempeÃ±o."
                 });
             }
 
@@ -1189,7 +1359,7 @@ namespace back.Controllers
                 return BadRequest(new
                 {
                     message =
-                        "El estudiante no está inscrito en esta cátedra."
+                        "El estudiante no estÃ¡ inscrito en esta cÃ¡tedra."
                 });
             }
 
@@ -1311,7 +1481,7 @@ namespace back.Controllers
                 return NotFound(new
                 {
                     message =
-                        "Cátedra no encontrada."
+                        "CÃ¡tedra no encontrada."
                 });
             }
 
@@ -1362,7 +1532,7 @@ namespace back.Controllers
                 return BadRequest(new
                 {
                     message =
-                        "El estudiante no está inscrito en esta cátedra."
+                        "El estudiante no estÃ¡ inscrito en esta cÃ¡tedra."
                 });
             }
 
