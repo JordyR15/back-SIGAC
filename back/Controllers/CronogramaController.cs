@@ -28,8 +28,7 @@ namespace back.Controllers
         // GET /api/Cronograma/{catedraId}
         // =========================================================
         [HttpGet("{catedraId:int}")]
-        public async Task<IActionResult> GetCronogramaByCatedra(
-            int catedraId)
+        public async Task<IActionResult> GetCronogramaByCatedra(int catedraId)
         {
             var existeCatedra = await _context.Catedras
                 .AnyAsync(c => c.Id == catedraId);
@@ -91,8 +90,7 @@ namespace back.Controllers
                 });
             }
 
-            var catedra = await _context.Catedras
-                .FindAsync(dto.CatedraId);
+            var catedra = await _context.Catedras.FindAsync(dto.CatedraId);
 
             if (catedra == null)
             {
@@ -174,17 +172,11 @@ namespace back.Controllers
                 });
             }
 
-            /*
-             * RF-005:
-             * No permitimos reprogramar una actividad hacia una fecha
-             * anterior al día actual.
-             */
             if (dto.FechaPrevista.Date < DateTime.UtcNow.Date)
             {
                 return BadRequest(new
                 {
-                    message =
-                        "No se puede reprogramar una actividad para una fecha pasada."
+                    message = "No se puede reprogramar una actividad para una fecha pasada."
                 });
             }
 
@@ -197,8 +189,7 @@ namespace back.Controllers
             {
                 return NotFound(new
                 {
-                    message =
-                        "Actividad del cronograma no encontrada."
+                    message = "Actividad del cronograma no encontrada."
                 });
             }
 
@@ -213,50 +204,32 @@ namespace back.Controllers
             {
                 return BadRequest(new
                 {
-                    message =
-                        "No existen cambios para registrar."
+                    message = "No existen cambios para registrar."
                 });
             }
 
             var historial = new HistorialCronograma
             {
                 CronogramaActividadId = actividad.Id,
-
                 FechaAnterior = fechaAnterior,
-
                 FechaNueva = dto.FechaPrevista,
-
-                DescripcionAnterior =
-                    descripcionAnterior,
-
-                DescripcionNueva =
-                    dto.Descripcion.Trim(),
-
-                ObservacionCambio =
-                    dto.ObservacionCambio.Trim(),
-
-                FechaModificacion =
-                    DateTime.UtcNow
+                DescripcionAnterior = descripcionAnterior,
+                DescripcionNueva = dto.Descripcion.Trim(),
+                ObservacionCambio = dto.ObservacionCambio.Trim(),
+                FechaModificacion = DateTime.UtcNow
             };
 
-            _context.Set<HistorialCronograma>()
-                .Add(historial);
+            _context.Set<HistorialCronograma>().Add(historial);
 
-            actividad.Descripcion =
-                dto.Descripcion.Trim();
-
-            actividad.FechaPrevista =
-                dto.FechaPrevista;
-
-            actividad.FechaReal =
-                dto.FechaReal;
+            actividad.Descripcion = dto.Descripcion.Trim();
+            actividad.FechaPrevista = dto.FechaPrevista;
+            actividad.FechaReal = dto.FechaReal;
 
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
-                message =
-                    "Cronograma reprogramado correctamente.",
+                message = "Cronograma reprogramado correctamente.",
 
                 actividad = new
                 {
@@ -287,34 +260,23 @@ namespace back.Controllers
         // GET /api/Cronograma/{catedraId}/historial
         // =========================================================
         [HttpGet("{catedraId:int}/historial")]
-        public async Task<IActionResult> GetHistorialCronograma(
-            int catedraId)
+        public async Task<IActionResult> GetHistorialCronograma(int catedraId)
         {
             var historial = await _context
                 .Set<HistorialCronograma>()
                 .Where(h =>
-                    h.CronogramaActividad.CatedraId ==
-                    catedraId)
-                .OrderByDescending(h =>
-                    h.FechaModificacion)
+                    h.CronogramaActividad.CatedraId == catedraId)
+                .OrderByDescending(h => h.FechaModificacion)
                 .Select(h => new
                 {
                     h.Id,
-
-                    actividadId =
-                        h.CronogramaActividadId,
-
-                    actividadActual =
-                        h.CronogramaActividad.Descripcion,
-
+                    actividadId = h.CronogramaActividadId,
+                    actividadActual = h.CronogramaActividad.Descripcion,
                     h.FechaAnterior,
                     h.FechaNueva,
-
                     h.DescripcionAnterior,
                     h.DescripcionNueva,
-
                     h.ObservacionCambio,
-
                     h.FechaModificacion
                 })
                 .ToListAsync();
@@ -324,78 +286,101 @@ namespace back.Controllers
 
         // =========================================================
         // RF-005 - ACTUALIZACIONES PARA EL ESTUDIANTE
-        //
         // GET /api/Cronograma/estudiante/actualizaciones
         //
-        // Funciona como notificación académica:
-        // muestra las reprogramaciones de las cátedras en las que
-        // está inscrito el estudiante autenticado.
+        // SOLO devuelve reprogramaciones reales guardadas en BD.
+        // Además resuelve el MateriaId correspondiente.
         // =========================================================
         [HttpGet("estudiante/actualizaciones")]
-        public async Task<IActionResult>
-            GetActualizacionesEstudiante()
+        public async Task<IActionResult> GetActualizacionesEstudiante()
         {
-            var claim = User.FindFirst(
-                ClaimTypes.NameIdentifier)?.Value;
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            if (!int.TryParse(
-                    claim,
-                    out var estudianteId))
+            if (!int.TryParse(claim, out var estudianteId))
             {
                 return Unauthorized(new
                 {
-                    message =
-                        "No se pudo identificar al usuario."
+                    message = "No se pudo identificar al usuario."
                 });
             }
 
-            var catedrasIds = await _context
-                .Inscripciones
+            var catedrasIds = await _context.Inscripciones
                 .Where(i =>
                     i.EstudianteId == estudianteId &&
                     i.CatedraId.HasValue)
-                .Select(i =>
-                    i.CatedraId!.Value)
+                .Select(i => i.CatedraId!.Value)
                 .Distinct()
                 .ToListAsync();
 
-            var actualizaciones = await _context
+            if (catedrasIds.Count == 0)
+            {
+                return Ok(Array.Empty<object>());
+            }
+
+            var cambios = await _context
                 .Set<HistorialCronograma>()
+                .AsNoTracking()
                 .Where(h =>
                     catedrasIds.Contains(
                         h.CronogramaActividad.CatedraId))
-                .OrderByDescending(h =>
-                    h.FechaModificacion)
+                .OrderByDescending(h => h.FechaModificacion)
                 .Select(h => new
                 {
                     id = h.Id,
-
-                    cronogramaActividadId =
-                        h.CronogramaActividadId,
-
-                    catedraId =
-                        h.CronogramaActividad.CatedraId,
-
-                    actividad =
-                        h.DescripcionNueva,
-
-                    fechaAnterior =
-                        h.FechaAnterior,
-
-                    fechaNueva =
-                        h.FechaNueva,
-
-                    observacion =
-                        h.ObservacionCambio,
-
-                    fechaNotificacion =
-                        h.FechaModificacion,
-
-                    mensaje =
-                        "El cronograma de una de tus cátedras fue actualizado."
+                    cronogramaActividadId = h.CronogramaActividadId,
+                    catedraId = h.CronogramaActividad.CatedraId,
+                    catedraNombre = h.CronogramaActividad.Catedra.Nombre,
+                    actividad = h.DescripcionNueva,
+                    fechaAnterior = h.FechaAnterior,
+                    fechaNueva = h.FechaNueva,
+                    observacion = h.ObservacionCambio,
+                    fechaNotificacion = h.FechaModificacion
                 })
                 .Take(30)
                 .ToListAsync();
+
+            var materias = await _context.Materias
+                .AsNoTracking()
+                .Select(m => new
+                {
+                    m.Id,
+                    m.Nombre
+                })
+                .ToListAsync();
+
+            var actualizaciones = cambios
+                .Select(cambio =>
+                {
+                    var materia = materias.FirstOrDefault(m =>
+                        string.Equals(
+                            m.Nombre?.Trim(),
+                            cambio.catedraNombre?.Trim(),
+                            StringComparison.OrdinalIgnoreCase));
+
+                    return new
+                    {
+                        cambio.id,
+                        cambio.cronogramaActividadId,
+                        cambio.catedraId,
+                        cambio.catedraNombre,
+
+                        materiaId = materia?.Id,
+
+                        materiaNombre =
+                            materia?.Nombre ??
+                            cambio.catedraNombre,
+
+                        cambio.actividad,
+                        cambio.fechaAnterior,
+                        cambio.fechaNueva,
+                        cambio.observacion,
+                        cambio.fechaNotificacion,
+
+                        mensaje =
+                            "El cronograma de tu cátedra fue actualizado."
+                    };
+                })
+                .ToList();
 
             return Ok(actualizaciones);
         }
