@@ -81,6 +81,13 @@ namespace back.Controllers
                 else if (name == "codigo") dto.Codigo = prop.Value.GetString();
                 else if (name == "descripcion") dto.Descripcion = prop.Value.GetString();
                 else if (name == "semestre") dto.Semestre = prop.Value.GetString();
+                else if (name == "claseid")
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt32(out var cId))
+                        dto.ClaseId = cId;
+                    else if (prop.Value.ValueKind == JsonValueKind.String && int.TryParse(prop.Value.GetString(), out var sClaseId))
+                        dto.ClaseId = sClaseId;
+                }
                 else if (name == "docenteid" || name == "docenteresponsableid")
                 {
                     if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt64(out var dId))
@@ -99,6 +106,7 @@ namespace back.Controllers
             var materias = await _context.Materias
                 .Include(m => m.DocenteResponsable)
                     .ThenInclude(d => d.Persona)
+                .Include(m => m.Clase)
                 .Include(m => m.Clases)
                 .ToListAsync();
 
@@ -136,6 +144,8 @@ namespace back.Controllers
                 nombre = m.Nombre,
                 codigo = m.Codigo,
                 descripcion = m.Descripcion,
+                claseId = m.ClaseId,
+                claseNombre = m.Clase != null ? m.Clase.Nombre : null,
                 docenteId = m.DocenteResponsableId,
                 docenteResponsableId = m.DocenteResponsableId,
                 nombreDocenteResponsable = m.DocenteResponsable?.Persona != null
@@ -172,6 +182,7 @@ namespace back.Controllers
             var materia = await _context.Materias
                 .Include(m => m.DocenteResponsable)
                     .ThenInclude(d => d.Persona)
+                .Include(m => m.Clase)
                 .Include(m => m.Clases)
                 .FirstOrDefaultAsync(m => m.Id == mId);
 
@@ -206,6 +217,8 @@ namespace back.Controllers
                 nombre = materia.Nombre,
                 codigo = materia.Codigo,
                 descripcion = materia.Descripcion,
+                claseId = materia.ClaseId,
+                claseNombre = materia.Clase != null ? materia.Clase.Nombre : null,
                 docenteId = materia.DocenteResponsableId,
                 docenteResponsableId = materia.DocenteResponsableId,
                 nombreDocenteResponsable = materia.DocenteResponsable?.Persona != null
@@ -232,7 +245,7 @@ namespace back.Controllers
             return Ok(result);
         }
 
-        // POST /api/Materia: Recibe DTO { nombre, codigo, descripcion, docenteId, ... }, persiste y sincroniza Catedra sin crear clases automáticamente
+        // POST /api/Materia: Recibe DTO { nombre, codigo, descripcion, docenteId, claseId, ... }, persiste y sincroniza Catedra sin crear clases automáticamente
         [HttpPost]
         public async Task<IActionResult> CreateMateria([FromBody] JsonElement rawBody)
         {
@@ -257,6 +270,11 @@ namespace back.Controllers
                 DocenteResponsableId = doc.Id
             };
 
+            if (dto.ClaseId.HasValue && dto.ClaseId.Value > 0)
+            {
+                materia.ClaseId = dto.ClaseId.Value;
+            }
+
             _context.Materias.Add(materia);
             await _context.SaveChangesAsync();
 
@@ -280,12 +298,20 @@ namespace back.Controllers
                 await _context.SaveChangesAsync();
             }
 
+            // Si se asignó claseId, cargar la clase para devolver su nombre
+            if (materia.ClaseId.HasValue)
+            {
+                await _context.Entry(materia).Reference(m => m.Clase).LoadAsync();
+            }
+
             var response = new
             {
                 id = materia.Id,
                 nombre = materia.Nombre,
                 codigo = materia.Codigo,
                 descripcion = materia.Descripcion,
+                claseId = materia.ClaseId,
+                claseNombre = materia.Clase != null ? materia.Clase.Nombre : null,
                 docenteId = materia.DocenteResponsableId,
                 docenteResponsableId = materia.DocenteResponsableId,
                 nombreDocenteResponsable = doc.Persona != null ? $"{doc.Persona.Nombre} {doc.Persona.Apellido}".Trim() : doc.Username,
@@ -314,6 +340,7 @@ namespace back.Controllers
             var materia = await _context.Materias
                 .Include(m => m.DocenteResponsable)
                     .ThenInclude(d => d.Persona)
+                .Include(m => m.Clase)
                 .Include(m => m.Clases)
                 .FirstOrDefaultAsync(m => m.Id == mId);
 
@@ -347,6 +374,11 @@ namespace back.Controllers
                 materia.Codigo = dto.Codigo.Trim();
             }
 
+            if (dto.ClaseId.HasValue)
+            {
+                materia.ClaseId = dto.ClaseId.Value > 0 ? dto.ClaseId.Value : null;
+            }
+
             if (dto.DocenteId.HasValue && dto.DocenteId.Value > 0)
             {
                 var doc = await GetDefaultDocenteAsync(dto.DocenteId.Value);
@@ -367,6 +399,10 @@ namespace back.Controllers
             await _context.SaveChangesAsync();
 
             var updatedDoc = await _context.Users.Include(u => u.Persona).FirstOrDefaultAsync(u => u.Id == materia.DocenteResponsableId);
+            if (materia.ClaseId.HasValue && materia.Clase == null)
+            {
+                await _context.Entry(materia).Reference(m => m.Clase).LoadAsync();
+            }
 
             return Ok(new
             {
@@ -374,6 +410,8 @@ namespace back.Controllers
                 nombre = materia.Nombre,
                 codigo = materia.Codigo,
                 descripcion = materia.Descripcion,
+                claseId = materia.ClaseId,
+                claseNombre = materia.Clase != null ? materia.Clase.Nombre : null,
                 docenteId = materia.DocenteResponsableId,
                 docenteResponsableId = materia.DocenteResponsableId,
                 nombreDocenteResponsable = updatedDoc?.Persona != null ? $"{updatedDoc.Persona.Nombre} {updatedDoc.Persona.Apellido}".Trim() : (updatedDoc?.Username ?? "Docente"),
@@ -657,8 +695,7 @@ namespace back.Controllers
                                     Tipo = a.Tipo,
                                     Estado = a.Estado,
                                     MateriaId = a.MateriaId
-                                })
-                                .ToListAsync();
+                                }).ToListAsync();
 
             if (!actividades.Any()) return NotFound(new { message = "No se encontraron actividades para esta materia." });
 
@@ -731,8 +768,7 @@ namespace back.Controllers
                                     MateriaId = r.MateriaId,
                                     Visto = _context.RecursosVistosPorEstudiante
                                                     .Any(rv => rv.RecursoId == r.Id && rv.EstudianteId == UserId.Value)
-                                })
-                                .ToListAsync();
+                                }).ToListAsync();
 
             if (!recursos.Any()) return NotFound(new { message = "No se encontraron recursos para esta materia." });
 

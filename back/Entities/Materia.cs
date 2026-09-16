@@ -10,6 +10,9 @@ namespace back.Entities
         public string Codigo { get; set; } // e.g., "MSI301"
         public int DocenteResponsableId { get; set; } // FK to User (Docente)
 
+        public int? ClaseId { get; set; }
+        public Clase? Clase { get; set; }
+
         // Navigation properties
         public User DocenteResponsable { get; set; }
         public ICollection<Recurso> Recursos { get; set; }

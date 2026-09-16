@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace back.DTOs
 {
     public class MateriaDto
@@ -7,6 +9,9 @@ namespace back.DTOs
         public string Descripcion { get; set; }
         public string Codigo { get; set; }
         public int DocenteResponsableId { get; set; }
+
+        public int? ClaseId { get; set; }
+        public string? ClaseNombre { get; set; }
 
         // Opcional: si necesitas mostrar datos del docente
         public string NombreDocenteResponsable { get; set; }
@@ -24,5 +29,6 @@ namespace back.DTOs
         public long? DocenteId { get; set; }
         public long? DocenteResponsableId { get; set; }
         public string? Semestre { get; set; }
+        public int? ClaseId { get; set; }
     }
 }

@@ -120,6 +120,14 @@ namespace back.Data
                 .WithMany(u => u.ClasesDocente)
                 .HasForeignKey(c => c.DocenteId);
 
+            // Relación opcional Materia -> Clase principal
+            modelBuilder.Entity<Materia>()
+                .HasOne(m => m.Clase)
+                .WithMany()
+                .HasForeignKey(m => m.ClaseId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // Relación muchos a muchos entre Clase y User (Estudiantes)
             modelBuilder.Entity<Clase>()
                 .HasMany(c => c.Estudiantes)
