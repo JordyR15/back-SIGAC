@@ -1177,29 +1177,7 @@ namespace back.Controllers
         // CRONOGRAMA
         // =========================================================
 
-        [HttpPut("catedras/{catedraId}/cronograma")]
-        public async Task<IActionResult> ReprogramarCronograma(
-            int catedraId,
-            [FromBody] CronogramaActividadDto cronogramaDto)
-        {
-            var actividad = await _context.Cronogramas
-                .FindAsync(cronogramaDto.Id);
 
-            if (actividad == null ||
-                actividad.CatedraId != catedraId)
-            {
-                return NotFound(
-                    "Actividad del cronograma no encontrada.");
-            }
-
-            actividad.Descripcion = cronogramaDto.Descripcion;
-            actividad.FechaPrevista = cronogramaDto.FechaPrevista;
-            actividad.FechaReal = cronogramaDto.FechaReal;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(cronogramaDto);
-        }
 
         // =========================================================
         // PLANIFICACIÃ“N DE AYUDANTÃAS
