@@ -41,10 +41,10 @@ namespace back.Controllers
             if (UserId == null) return Unauthorized();
 
             // Solo el docente de la clase o administrador puede asignar un ayudante
-            var userRol = User.FindFirst(ClaimTypes.Role)?.Value;
-            if (userRol != "Administrador" && !await IsDocenteOfClase(claseId))
+            bool esAdmin = User.IsInRole("Administrador") || User.Claims.Any(c => c.Value == "Administrador" || c.Value == "Coordinador");
+            if (!esAdmin && !await IsDocenteOfClase(claseId))
             {
-                return Forbid("Solo el docente de esta clase o un administrador puede asignar un ayudante.");
+                return StatusCode(403, new { message = "Solo el docente de esta clase o un administrador puede asignar un ayudante." });
             }
 
             if (claseId > int.MaxValue) return BadRequest("Identificador de clase inválido.");
@@ -388,9 +388,10 @@ namespace back.Controllers
             var isDocente = c.DocenteId == UserId.Value;
             var isStudent = c.Estudiantes.Any(e => e.Id == UserId.Value);
 
-            if (!isDocente && !isStudent)
+            var isAdmin = User.IsInRole("Administrador") || User.Claims.Any(c => c.Value == "Administrador" || c.Value == "Coordinador");
+            if (!isDocente && !isStudent && !isAdmin)
             {
-                return Forbid("No tienes permiso para ver esta clase.");
+                return StatusCode(403, new { message = "No tienes permiso para ver esta clase." });
             }
 
             var dto = new ClaseDto
@@ -412,7 +413,6 @@ namespace back.Controllers
 
         // Endpoint PUT para actualizar Clase (Soluciona Error 405 en updateClase)
         [HttpPut("{id}")]
-        [HttpPut("/api/clases/{id}")]
         public async Task<IActionResult> UpdateClase(long id, [FromBody] CreateClaseDto dto)
         {
             if (id > int.MaxValue) return NotFound(new { message = "Clase no encontrada." });
@@ -438,7 +438,6 @@ namespace back.Controllers
 
         // Endpoint DELETE para Clases (Error 405)
         [HttpDelete("{id}")]
-        [HttpDelete("/api/clases/{id}")]
         public async Task<IActionResult> DeleteClase(long id)
         {
             if (id > int.MaxValue) return NotFound(new { message = "Clase no encontrada." });
@@ -465,7 +464,12 @@ namespace back.Controllers
         public async Task<IActionResult> AddEstudiantesToClase(long claseId, [FromBody] JsonElement payload)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfClase(claseId)) return Forbid("Solo el docente de esta clase puede añadir estudiantes.");
+            bool esAdmin = User.IsInRole("Administrador") || User.Claims.Any(c => c.Value == "Administrador" || c.Value == "Coordinador");
+            bool esDocenteDeClase = await IsDocenteOfClase(claseId);
+            if (!esAdmin && !esDocenteDeClase)
+            {
+                return StatusCode(403, new { message = "Solo el docente titular o el administrador pueden inscribir estudiantes." });
+            }
 
             int cId = claseId <= int.MaxValue ? (int)claseId : 1;
             var clase = await _context.Clases
@@ -774,9 +778,6 @@ namespace back.Controllers
 
         // Endpoint para obtener los estudiantes de una clase (docentes de la clase o estudiantes de la clase o administrador)
         [HttpGet("{claseId}/estudiantes")]
-        [HttpGet("/api/Clase/{claseId}/estudiantes")]
-        [HttpGet("/api/clases/{claseId}/estudiantes")]
-        [HttpGet("/api/Docente/clases/{claseId}/estudiantes")]
         public async Task<IActionResult> GetEstudiantesFromClase(long claseId)
         {
             if (UserId == null) return Unauthorized();
@@ -800,7 +801,7 @@ namespace back.Controllers
 
             if (!isDocente && !isStudent && !isAdmin)
             {
-                return Forbid("No tienes permiso para ver los estudiantes de esta clase.");
+                return StatusCode(403, new { message = "No tienes permiso para ver los estudiantes de esta clase." });
             }
 
             var estudiantesFromClase = clase.Estudiantes.ToList();
@@ -837,61 +838,39 @@ namespace back.Controllers
         {
             if (UserId == null) return Unauthorized();
 
-            if (claseId > int.MaxValue)
+            if (claseId > int.MaxValue || estudianteId > int.MaxValue)
             {
-                return Ok(new { success = true, message = "Estudiante removido" });
+                return Ok(new { success = true, message = "Estudiante removido de la clase exitosamente." });
             }
 
-            int cId = (int)claseId;
-            var clase = await _context.Clases
-                .Include(c => c.Estudiantes)
-                .FirstOrDefaultAsync(c => c.Id == cId);
-
-            if (clase == null)
+            bool esAdmin = User.IsInRole("Administrador") || User.Claims.Any(c => c.Value == "Administrador" || c.Value == "Coordinador");
+            bool esDocenteDeClase = await IsDocenteOfClase(claseId);
+            if (!esAdmin && !esDocenteDeClase)
             {
-                return Ok(new { success = true, message = "Estudiante removido" });
-            }
-
-            var userRol = User.FindFirst(ClaimTypes.Role)?.Value;
-            if (userRol != "Administrador" && !await IsDocenteOfClase(claseId))
-            {
-                return Forbid("Solo el docente de esta clase o un administrador puede desvincular estudiantes.");
-            }
-
-            if (estudianteId > int.MaxValue)
-            {
-                return Ok(new { success = true, message = "Estudiante removido" });
+                return StatusCode(403, new { message = "Solo el docente titular o el administrador pueden desvincular estudiantes." });
             }
 
             int eId = (int)estudianteId;
-            var estudiante = clase.Estudiantes.FirstOrDefault(e => e.Id == eId);
-            if (estudiante == null)
-            {
-                var persona = await _context.Personas.FirstOrDefaultAsync(p => p.Id == eId);
-                if (persona != null)
-                {
-                    estudiante = clase.Estudiantes.FirstOrDefault(e => e.Id == persona.UserId);
-                }
-            }
+            var persona = await _context.Personas.FirstOrDefaultAsync(p => p.Id == eId);
+            int targetUserId = (persona != null && persona.UserId > 0) ? persona.UserId : eId;
 
-            if (estudiante == null)
-            {
-                return Ok(new { success = true, message = "Estudiante removido" });
-            }
+            var inscripciones = await _context.Inscripciones
+                .Where(i => i.ClaseId == (int)claseId && (i.EstudianteId == eId || i.EstudianteId == targetUserId))
+                .ToListAsync();
+            _context.Inscripciones.RemoveRange(inscripciones);
 
-            clase.Estudiantes.Remove(estudiante);
-
-            var inscripcion = await _context.Inscripciones
-                .FirstOrDefaultAsync(i => i.EstudianteId == estudiante.Id && i.CatedraId == clase.MateriaId);
-            if (inscripcion != null)
+            var clase = await _context.Clases.Include(c => c.Estudiantes).FirstOrDefaultAsync(c => c.Id == (int)claseId);
+            if (clase != null)
             {
-                _context.Inscripciones.Remove(inscripcion);
+                var est = clase.Estudiantes.FirstOrDefault(e => e.Id == eId || e.Id == targetUserId);
+                if (est != null) clase.Estudiantes.Remove(est);
             }
 
             await _context.SaveChangesAsync();
-
-            return Ok(new { success = true, message = "Estudiante removido" });
+            return Ok(new { success = true, message = "Estudiante removido de la clase exitosamente." });
         }
+
+
 
         // Endpoint para obtener las clases en las que está registrado el estudiante
         [HttpGet("estudiante/{id}")]

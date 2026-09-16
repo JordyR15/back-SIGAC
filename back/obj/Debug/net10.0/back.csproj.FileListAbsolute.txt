@@ -374,3 +374,5 @@ C:\Users\11yer\IdeaProjects\back-SIGAC\back\obj\Debug\net10.0\back.genruntimecon
 C:\Users\11yer\IdeaProjects\back-SIGAC\back\obj\Debug\net10.0\ref\back.dll
 C:\Users\11yer\IdeaProjects\back-SIGAC\back\bin\Debug\net10.0\back.staticwebassets.runtime.json
 C:\Users\11yer\IdeaProjects\back-SIGAC\back\obj\Debug\net10.0\compressed\dbxae19dvc-{0}-6sfqajbthu-6sfqajbthu.gz
+C:\Users\11yer\IdeaProjects\back-SIGAC\back\obj\Debug\net10.0\compressed\knprv8fitl-{0}-abzxbygwam-abzxbygwam.gz
+C:\Users\11yer\IdeaProjects\back-SIGAC\back\obj\Debug\net10.0\compressed\jrzhi15l6q-{0}-aidozrjjcl-aidozrjjcl.gz

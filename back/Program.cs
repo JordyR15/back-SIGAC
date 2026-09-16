@@ -117,11 +117,11 @@ var app = builder.Build();
 app.UseMiddleware<ExceptionMiddleware>();
 
 // 1. Colocar UseCors PRIMERO
-app.UseCors(x => x
+app.UseCors(policy => policy
+    .WithOrigins("http://localhost:3000", "http://localhost:4200")
     .AllowAnyHeader()
     .AllowAnyMethod()
-    .AllowCredentials()
-    .SetIsOriginAllowed(origin => true)); // Permite localhost:3000, localhost:4200, etc.
+    .AllowCredentials());
 
 // 2. Registrar Swagger UI en el mismo puerto de la API
 app.UseSwagger();

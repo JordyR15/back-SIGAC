@@ -268,35 +268,6 @@ namespace back.Controllers
                 ? doc.Id
                 : (int)docenteId;
 
-            if (targetDocId > 0)
-            {
-                var materiasDoc = await _context.Materias
-                    .Where(m =>
-                        m.DocenteResponsableId == targetDocId)
-                    .ToListAsync();
-
-                foreach (var mat in materiasDoc)
-                {
-                    var hasClase = await _context.Clases
-                        .AnyAsync(c =>
-                            c.MateriaId == mat.Id &&
-                            c.DocenteId == targetDocId);
-
-                    if (!hasClase)
-                    {
-                        var autoClase = new Clase
-                        {
-                            Nombre = $"{mat.Nombre} - Paralelo A",
-                            MateriaId = mat.Id,
-                            DocenteId = targetDocId
-                        };
-
-                        _context.Clases.Add(autoClase);
-                        await _context.SaveChangesAsync();
-                    }
-                }
-            }
-
             var clases = await _context.Clases
                 .Include(c => c.Materia)
                 .Include(c => c.Docente)
