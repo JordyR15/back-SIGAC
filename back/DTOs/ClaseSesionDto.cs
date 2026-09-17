@@ -17,5 +17,6 @@ namespace back.DTOs
         public string EdificioPresencial { get; set; }
         public string AulaPresencial { get; set; }
         public string PisoPresencial { get; set; }
+        public string Observaciones { get; set; }
     }
 }
