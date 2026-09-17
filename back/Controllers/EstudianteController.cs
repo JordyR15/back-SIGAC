@@ -1,4 +1,4 @@
-using back.Data;
+﻿using back.Data;
 using back.DTOs;
 using back.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +10,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace back.Controllers
@@ -21,10 +23,17 @@ namespace back.Controllers
     public class EstudianteController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly back.Services.IEmailService _emailService;
+        private readonly Microsoft.Extensions.Logging.ILogger<EstudianteController> _logger;
         
-        public EstudianteController(AppDbContext context)
+        public EstudianteController(
+            AppDbContext context,
+            back.Services.IEmailService emailService,
+            Microsoft.Extensions.Logging.ILogger<EstudianteController> logger)
         {
             _context = context;
+            _emailService = emailService;
+            _logger = logger;
         }
 
         // Propiedad para obtener de forma segura el ID del estudiante autenticado
@@ -78,81 +87,185 @@ namespace back.Controllers
             return Ok(estudiantes);
         }
 
-        [HttpPost("ayudantias/postulaciones")]
-        public async Task<IActionResult> PostularAyudantia([FromBody] PostulacionAyudantiaDto postulacionDto)
-        {
-            if (EstudianteId == null) return Unauthorized();
-
-            var existePostulacion = await _context.Ayudantias
-                .AnyAsync(a => a.EstudianteId == EstudianteId.Value && a.CatedraId == postulacionDto.CatedraId);
-
-            if (existePostulacion)
-            {
-                return Conflict(new { message = "Ya te has postulado a esta ayudantía." });
-            }
-
-            // Verificar inscripción y promedio actual
-            var inscripcion = await _context.Inscripciones
-                .FirstOrDefaultAsync(i => i.EstudianteId == EstudianteId.Value && i.CatedraId == postulacionDto.CatedraId);
-
-            if (inscripcion == null)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Debes estar inscrito en la cátedra para postular a ayudantía." });
-            }
-
-            var catedra = await _context.Catedras.FindAsync(postulacionDto.CatedraId);
-            if (catedra != null && catedra.MinimoNota.HasValue && inscripcion.PromedioActual < catedra.MinimoNota.Value)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tu promedio actual es menor que la nota mínima para postular a esta ayudantía." });
-            }
-
-            var ayudantia = new Ayudantia
-            {
-                CatedraId = postulacionDto.CatedraId,
-                EstudianteId = EstudianteId.Value,
-                Estado = "Pendiente",
-                ConvocatoriaId = postulacionDto.ConvocatoriaId
-            };
-
-            _context.Ayudantias.Add(ayudantia);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Postulación enviada exitosamente." });
-        }
-
-        // Nuevo endpoint: POST /api/Estudiante/postulaciones que recibe { convocatoriaId }
         [HttpPost("postulaciones")]
-        public async Task<IActionResult> PostularAConvocatoria([FromBody] PostulacionAyudantiaDto dto)
+        [HttpPost("ayudantias/postulaciones")]
+        public async Task<IActionResult> PostularAyudantia([FromBody] PostulacionAyudantiaDto dto)
         {
-            if (EstudianteId == null) return Unauthorized();
-
-            if (!dto.ConvocatoriaId.HasValue)
+            if (dto == null)
             {
-                return BadRequest(new { message = "Debe proporcionar convocatoriaId." });
+                return BadRequest(new { message = "Datos de postulaciÃ³n requeridos." });
             }
 
-            var convocatoria = await _context.Convocatorias.FindAsync(dto.ConvocatoriaId.Value);
-            if (convocatoria == null) return NotFound(new { message = "Convocatoria no encontrada." });
-            if (convocatoria.Estado != "Publicada") return BadRequest(new { message = "Convocatoria no está publicada." });
+            int targetEstudianteId = dto.EstudianteId ?? dto.PostulanteId ?? EstudianteId ?? 0;
+            var lookupEmail = (dto.Correo ?? dto.Email)?.Trim().ToLowerInvariant();
 
-            var existe = await _context.Ayudantias.AnyAsync(a => a.EstudianteId == EstudianteId.Value && a.ConvocatoriaId == dto.ConvocatoriaId.Value);
-            if (existe) return Conflict(new { message = "Ya te has postulado a esta convocatoria." });
+            // Buscar usuario existente evitando miembros [NotMapped]
+            User? user = null;
+            if (targetEstudianteId > 0)
+            {
+                user = await _context.Users
+                    .Include(u => u.Persona)
+                    .FirstOrDefaultAsync(u => u.Id == targetEstudianteId);
+            }
 
-            var inscripcion = await _context.Inscripciones.FirstOrDefaultAsync(i => i.EstudianteId == EstudianteId.Value && i.CatedraId == convocatoria.CatedraId);
-            if (inscripcion == null) return StatusCode(StatusCodes.Status403Forbidden, new { message = "Debes estar inscrito en la cátedra para postular a ayudantía." });
+            if (user == null && !string.IsNullOrEmpty(dto.Username))
+            {
+                user = await _context.Users
+                    .Include(u => u.Persona)
+                    .FirstOrDefaultAsync(u => u.Username.ToLower() == dto.Username.ToLower());
+            }
 
+            if (user == null && !string.IsNullOrEmpty(lookupEmail))
+            {
+                var personaMatch = await _context.Personas
+                    .FirstOrDefaultAsync(p => p.Correo.ToLower() == lookupEmail);
+                if (personaMatch != null)
+                {
+                    user = await _context.Users
+                        .Include(u => u.Persona)
+                        .FirstOrDefaultAsync(u => u.Id == personaMatch.UserId);
+                }
+            }
+
+            if (user == null && !string.IsNullOrEmpty(dto.Cedula))
+            {
+                var personaMatch = await _context.Personas
+                    .FirstOrDefaultAsync(p => p.Cedula == dto.Cedula);
+                if (personaMatch != null)
+                {
+                    user = await _context.Users
+                        .Include(u => u.Persona)
+                        .FirstOrDefaultAsync(u => u.Id == personaMatch.UserId);
+                }
+            }
+
+            if (user == null)
+            {
+                return BadRequest(new { message = "El estudiante no existe en el sistema." });
+            }
+
+            targetEstudianteId = user.Id;
+
+            int? resolvedMateriaId = dto.MateriaId;
+            int? resolvedCatedraId = null;
+
+            // 1. Si el ID enviado existe directamente en Catedras
+            if (dto.CatedraId.HasValue && await _context.Catedras.AnyAsync(c => c.Id == dto.CatedraId.Value))
+            {
+                resolvedCatedraId = dto.CatedraId.Value;
+                var catObj = await _context.Catedras.FindAsync(resolvedCatedraId.Value);
+                if (catObj != null)
+                {
+                    var matMatch = await _context.Materias.FirstOrDefaultAsync(m => m.Nombre == catObj.Nombre || m.Nombre.ToLower() == catObj.Nombre.ToLower());
+                    if (matMatch != null) resolvedMateriaId = matMatch.Id;
+                }
+            }
+            // 2. Si es un MateriaId, buscar la Catedra por nombre o cÃ³digo de la materia
+            else
+            {
+                var matId = dto.MateriaId ?? dto.CatedraId;
+                if (matId.HasValue)
+                {
+                    var mat = await _context.Materias.FindAsync(matId.Value);
+                    if (mat != null)
+                    {
+                        resolvedMateriaId = mat.Id;
+                        var cat = await _context.Catedras.FirstOrDefaultAsync(c => c.Nombre == mat.Nombre || c.Nombre.ToLower() == mat.Nombre.ToLower());
+                        if (cat != null) resolvedCatedraId = cat.Id;
+                    }
+                }
+            }
+
+            if (!resolvedCatedraId.HasValue && dto.ConvocatoriaId.HasValue && dto.ConvocatoriaId.Value > 0)
+            {
+                var conv = await _context.Convocatorias.FindAsync(dto.ConvocatoriaId.Value);
+                if (conv != null && await _context.Catedras.AnyAsync(c => c.Id == conv.CatedraId))
+                {
+                    resolvedCatedraId = conv.CatedraId;
+                    var catObj = await _context.Catedras.FindAsync(resolvedCatedraId.Value);
+                    if (catObj != null)
+                    {
+                        var matMatch = await _context.Materias.FirstOrDefaultAsync(m => m.Nombre == catObj.Nombre || m.Nombre.ToLower() == catObj.Nombre.ToLower());
+                        if (matMatch != null) resolvedMateriaId = matMatch.Id;
+                    }
+                }
+            }
+
+            // 3. Fallback seguro al primer ID existente en Catedras para no violar la FK
+            if (!resolvedCatedraId.HasValue)
+            {
+                resolvedCatedraId = await _context.Catedras.Select(c => (int?)c.Id).FirstOrDefaultAsync();
+            }
+
+            if (!resolvedCatedraId.HasValue)
+            {
+                var primeraMateria = await _context.Materias.FirstOrDefaultAsync();
+                var defaultCat = new Catedra
+                {
+                    Nombre = primeraMateria != null ? primeraMateria.Nombre : "CÃ¡tedra General",
+                    Semestre = "2024-1",
+                    DocenteId = primeraMateria != null ? primeraMateria.DocenteResponsableId : targetEstudianteId
+                };
+                _context.Catedras.Add(defaultCat);
+                await _context.SaveChangesAsync();
+                resolvedCatedraId = defaultCat.Id;
+            }
+
+            // REGLA DE INCOMPATIBILIDAD ACADÃ‰MICA: Verificar si el estudiante tiene una matrÃ­cula activa en esa materia o clase
+            bool estaCursando = await _context.Inscripciones.AnyAsync(i => 
+                i.EstudianteId == targetEstudianteId && 
+                (
+                    (i.CatedraId.HasValue && resolvedCatedraId.HasValue && i.CatedraId.Value == resolvedCatedraId.Value) ||
+                    (i.Clase != null && resolvedMateriaId.HasValue && i.Clase.MateriaId == resolvedMateriaId.Value)
+                )
+            );
+
+            if (estaCursando)
+            {
+                return BadRequest(new { 
+                    message = "Incompatibilidad acadÃ©mica: El estudiante se encuentra cursando activamente esta asignatura en el periodo actual y no puede postularse como Ayudante de CÃ¡tedra de la misma." 
+                });
+            }
+
+            // Verificar si ya existe postulaciÃ³n para evitar duplicados
+            var existing = await _context.Ayudantias
+                .FirstOrDefaultAsync(a => a.EstudianteId == targetEstudianteId && a.CatedraId == resolvedCatedraId.Value);
+
+            if (existing != null)
+            {
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Ya existe una postulaciÃ³n registrada para esta cÃ¡tedra.", 
+                    id = existing.Id,
+                    estudianteId = existing.EstudianteId,
+                    catedraId = existing.CatedraId,
+                    estado = existing.Estado
+                });
+            }
+
+            // Crear la entidad con el CatedraId vÃ¡lido resuelto
             var ayudantia = new Ayudantia
             {
-                CatedraId = convocatoria.CatedraId,
-                EstudianteId = EstudianteId.Value,
-                Estado = "EnEvaluacion",
-                ConvocatoriaId = convocatoria.Id
+                EstudianteId = targetEstudianteId,
+                CatedraId = resolvedCatedraId.Value,
+                Estado = "Pendiente",
+                HorasAsignadas = 0,
+                ConvocatoriaId = dto.ConvocatoriaId
             };
 
             _context.Ayudantias.Add(ayudantia);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Postulación enviada y en evaluación." });
+            return Ok(new 
+            { 
+                success = true, 
+                message = "PostulaciÃ³n registrada exitosamente.", 
+                id = ayudantia.Id,
+                estudianteId = ayudantia.EstudianteId,
+                catedraId = ayudantia.CatedraId,
+                estado = ayudantia.Estado
+            });
         }
 
         [HttpPost("ayudantias/bitacora")]

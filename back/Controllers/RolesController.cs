@@ -50,22 +50,22 @@ namespace back.Controllers
             if (requestedRoles.Any(r => string.Equals(r, "Administrador", StringComparison.OrdinalIgnoreCase))
                 && !string.Equals(callerRole, "Administrador", StringComparison.OrdinalIgnoreCase))
             {
-                return Forbid("Solo Administrador puede asignar el rol Administrador.");
+                return StatusCode(403, new { message = "Solo Administrador puede asignar el rol Administrador." });
             }
 
             string[] allowedTargets = callerRole switch
             {
-                "Administrador" => new[] { "Administrador", "Decano", "Coordinador", "Docente", "Estudiante" },
-                "Decano" => new[] { "Coordinador", "Docente", "Estudiante" },
-                "Coordinador" => new[] { "Docente", "Estudiante" },
-                "Docente" => new[] { "Estudiante" },
+                "Administrador" => new[] { "Administrador", "Decano", "Coordinador", "Docente", "Estudiante", "Ayudante", "Jurado" },
+                "Decano" => new[] { "Coordinador", "Docente", "Estudiante", "Ayudante", "Jurado" },
+                "Coordinador" => new[] { "Docente", "Estudiante", "Ayudante", "Jurado" },
+                "Docente" => new[] { "Estudiante", "Ayudante" },
                 _ => Array.Empty<string>()
             };
 
             var invalidRole = requestedRoles.FirstOrDefault(r => !allowedTargets.Any(a => string.Equals(a, r, StringComparison.OrdinalIgnoreCase)));
             if (invalidRole != null)
             {
-                return Forbid($"El rol '{callerRole}' no está autorizado para asignar el rol '{invalidRole}'.");
+                return StatusCode(403, new { message = $"El rol '{callerRole}' no está autorizado para asignar el rol '{invalidRole}'." });
             }
 
             var user = await _context.Users.Include(u => u.Persona).FirstOrDefaultAsync(u => u.Id == userId);

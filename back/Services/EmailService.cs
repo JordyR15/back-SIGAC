@@ -65,20 +65,23 @@ namespace back.Services
                 };
 
                 var senderAddress = !string.IsNullOrWhiteSpace(_settings.SenderEmail) ? _settings.SenderEmail : "no-reply@uteq.edu.ec";
-                var fromAddress = new MailAddress(senderAddress, _settings.SenderName ?? "SIGAC UTEQ");
-                var toAddress = new MailAddress(toEmail);
+                var senderDisplayName = !string.IsNullOrWhiteSpace(_settings.SenderName) ? _settings.SenderName : "SIGAC UTEQ";
 
-                using var mailMessage = new MailMessage(fromAddress, toAddress)
+                var mailMessage = new MailMessage
                 {
+                    From = new MailAddress(senderAddress, senderDisplayName, Encoding.UTF8),
                     Subject = subject,
+                    SubjectEncoding = Encoding.UTF8,
                     Body = htmlBody,
-                    IsBodyHtml = true,
                     BodyEncoding = Encoding.UTF8,
-                    SubjectEncoding = Encoding.UTF8
+                    HeadersEncoding = Encoding.UTF8,
+                    IsBodyHtml = true
                 };
 
+                mailMessage.To.Add(new MailAddress(toEmail));
+
                 await client.SendMailAsync(mailMessage);
-                _logger.LogInformation(">>> [SMTP Ã‰XITO] Correo de credenciales enviado a: {To}", toEmail);
+                _logger.LogInformation(">>> [SMTP ÉXITO] Correo de credenciales enviado a: {To}", toEmail);
                 return true;
             }
             catch (SmtpException smtpEx)
@@ -93,101 +96,49 @@ namespace back.Services
             }
         }
 
-        public async Task<bool> SendCredentialsEmailAsync(string toEmail, string nombreCompleto, string username, string password, string rol)
+        public async Task<bool> SendCredentialsAsync(string toEmail, string fullName, string username, string tempPassword, string role)
         {
-            var subject = "Bienvenido a SIGAC - Credenciales de Acceso";
-            var htmlBody = $@"
+            string subject = $"Acceso Institucional SIGAC - Credenciales de {role}";
+            string body = $@"
 <!DOCTYPE html>
-<html lang=""es"">
-<head>
-  <meta charset=""UTF-8"">
-  <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-  <title>Credenciales de Acceso - SIGAC</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }}
-    .container {{ max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
-    .header {{ background: #0f172a; color: #ffffff; padding: 28px 24px; text-align: center; }}
-    .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }}
-    .header p {{ margin: 4px 0 0; font-size: 13px; color: #94a3b8; }}
-    .content {{ padding: 28px 24px; }}
-    .greeting {{ font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #0f172a; }}
-    .intro {{ font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 20px; }}
-    .card {{ background: #f1f5f9; border-radius: 8px; padding: 16px; margin-bottom: 20px; }}
-    .card-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px; }}
-    .card-row:last-child {{ border-bottom: none; }}
-    .label {{ font-weight: 600; color: #334155; }}
-    .value {{ font-family: Consolas, Monaco, monospace; color: #0284c7; font-weight: 600; }}
-    .badge {{ display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }}
-    .warning {{ font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 24px; }}
-    .footer {{ text-align: center; padding: 20px; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }}
-  </style>
-</head>
-<body>
-  <div class=""container"">
-    <div class=""header"">
-      <h1>SIGAC</h1>
-      <p>Sistema Integrado de Gestión Académica y Cátedras</p>
+<html>
+<head><meta charset='utf-8'></head>
+<body style='font-family: Arial, sans-serif; background-color: #f8fafc; padding: 30px; margin: 0;'>
+  <div style='max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;'>
+    <div style='background: linear-gradient(135deg, #1e3a8a, #047857); padding: 25px; text-align: center; color: white;'>
+      <h1 style='margin: 0; font-size: 20px; font-weight: bold; letter-spacing: 0.5px;'>UNIVERSIDAD TÉCNICA ESTATAL DE QUEVEDO</h1>
+      <p style='margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;'>Sistema Integral de Gestión Académica y Ayudantías (SIGAC)</p>
     </div>
-    <div class=""content"">
-      <div class=""greeting"">Estimado/a {WebUtility.HtmlEncode(nombreCompleto)},</div>
-      <div class=""intro"">
-        Se ha creado tu cuenta institucional en la plataforma académica SIGAC. A continuación, encontrarás los datos de acceso asignados:
+    <div style='padding: 30px; color: #1e293b; line-height: 1.6;'>
+      <h2 style='color: #0f172a; font-size: 18px; margin-top: 0;'>Estimado(a) {fullName},</h2>
+      <p>Se ha registrado tu postulación y cuenta institucional en la plataforma con el rol de <strong>{role}</strong>.</p>
+
+      <div style='background-color: #f1f5f9; border-left: 4px solid #047857; padding: 20px; border-radius: 6px; margin: 25px 0;'>
+        <h3 style='margin: 0 0 12px 0; color: #047857; font-size: 15px;'>Tus Credenciales de Acceso:</h3>
+        <p style='margin: 6px 0;'><strong>Usuario:</strong> <code style='font-size: 15px; color: #1e3a8a; background: #e2e8f0; padding: 2px 6px; border-radius: 4px;'>{username}</code></p>
+        <p style='margin: 6px 0;'><strong>Contraseña Temporal:</strong> <code style='font-size: 15px; color: #b91c1c; background: #fee2e2; padding: 2px 6px; border-radius: 4px; font-weight: bold;'>{tempPassword}</code></p>
+        <p style='margin: 6px 0;'><strong>Rol Asignado:</strong> {role}</p>
       </div>
-      <div class=""card"">
-        <div class=""card-row"">
-          <span class=""label"">Rol Institucional:</span>
-          <span class=""badge"">{WebUtility.HtmlEncode(rol)}</span>
-        </div>
-        <div class=""card-row"">
-          <span class=""label"">Usuario:</span>
-          <span class=""value"">{WebUtility.HtmlEncode(username)}</span>
-        </div>
-        <div class=""card-row"">
-          <span class=""label"">Contraseña temporal:</span>
-          <span class=""value"">{WebUtility.HtmlEncode(password)}</span>
-        </div>
+
+      <div style='text-align: center; margin: 30px 0;'>
+        <a href='http://localhost:4200/login' style='background-color: #1e3a8a; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;'>Iniciar Sesión en SIGAC</a>
       </div>
-      <div class=""warning"">
-        <strong>Importante:</strong> Por motivos de seguridad y resguardo de la información institucional, te recomendamos modificar tu contraseña temporal durante el primer inicio de sesión.
-      </div>
+
+      <p style='font-size: 12px; color: #64748b;'>Por razones de seguridad, se recomienda cambiar tu contraseña temporal tras el primer ingreso.</p>
     </div>
-    <div class=""footer"">
-      © {DateTime.UtcNow.Year} Universidad Técnica Estatal de Quevedo - SIGAC.<br>
-      Este es un mensaje automático generado por el sistema. Por favor, no respondas a este correo.
+    <div style='background-color: #f8fafc; padding: 15px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;'>
+      Comisión de Ayudantías de Cátedra • Universidad Técnica Estatal de Quevedo
     </div>
   </div>
 </body>
 </html>";
 
-            return await SendEmailAsync(toEmail, subject, htmlBody);
+            return await SendEmailAsync(toEmail, subject, body);
         }
 
-        public async Task<bool> SendCredentialsAsync(string toEmail, string nombreCompleto, string username, string password, string rol)
+        public async Task<bool> SendCredentialsEmailAsync(string toEmail, string nombreCompleto, string username, string password, string rol)
         {
-            try
-            {
-                _logger.LogInformation("Iniciando envío inmediato de credenciales a {ToEmail} (Usuario: {Username}) mediante servidor {Server}:{Port}...", toEmail, username, _settings.Server, _settings.Port);
-                var result = await SendCredentialsEmailAsync(toEmail, nombreCompleto, username, password, rol);
-                if (result)
-                {
-                    _logger.LogInformation("Credenciales de acceso entregadas correctamente a {ToEmail}.", toEmail);
-                }
-                else
-                {
-                    _logger.LogWarning("No se pudo completar el envío de credenciales a {ToEmail}.", toEmail);
-                }
-                return result;
-            }
-            catch (SmtpException smtpEx)
-            {
-                _logger.LogError(smtpEx, "Fallo SMTP de Google/Red en SendCredentialsAsync hacia {ToEmail}: {Message} (StatusCode: {StatusCode})", toEmail, smtpEx.Message, smtpEx.StatusCode);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Excepción no controlada en SendCredentialsAsync hacia {ToEmail}: {Message}", toEmail, ex.Message);
-                return false;
-            }
+            return await SendCredentialsAsync(toEmail, nombreCompleto, username, password, rol);
         }
 
         public async Task<bool> SendPasswordResetEmailAsync(string toEmail, string nombreCompleto, string resetTokenOrTemporaryPassword)
@@ -200,42 +151,26 @@ namespace back.Services
   <meta charset=""UTF-8"">
   <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
   <title>Restablecimiento de Contraseña - SIGAC</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }}
-    .container {{ max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
-    .header {{ background: #0f172a; color: #ffffff; padding: 28px 24px; text-align: center; }}
-    .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; }}
-    .header p {{ margin: 4px 0 0; font-size: 13px; color: #94a3b8; }}
-    .content {{ padding: 28px 24px; }}
-    .greeting {{ font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #0f172a; }}
-    .intro {{ font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 20px; }}
-    .token-box {{ background: #eff6ff; border: 1px dashed #3b82f6; border-radius: 8px; padding: 18px; text-align: center; margin-bottom: 20px; }}
-    .token-val {{ font-family: Consolas, Monaco, monospace; font-size: 20px; font-weight: 700; color: #1d4ed8; letter-spacing: 2px; }}
-    .warning {{ font-size: 13px; color: #64748b; line-height: 1.5; }}
-    .footer {{ text-align: center; padding: 20px; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; }}
-  </style>
 </head>
-<body>
-  <div class=""container"">
-    <div class=""header"">
-      <h1>SIGAC</h1>
-      <p>Sistema Integrado de Gestión Académica y Cátedras</p>
+<body style='font-family: Arial, sans-serif; background-color: #f8fafc; padding: 30px; margin: 0;'>
+  <div style='max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;'>
+    <div style='background: linear-gradient(135deg, #1e3a8a, #047857); padding: 25px; text-align: center; color: white;'>
+      <h1 style='margin: 0; font-size: 20px; font-weight: bold; letter-spacing: 0.5px;'>UNIVERSIDAD TÉCNICA ESTATAL DE QUEVEDO</h1>
+      <p style='margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;'>Sistema Integral de Gestión Académica y Ayudantías (SIGAC)</p>
     </div>
-    <div class=""content"">
-      <div class=""greeting"">Estimado/a {WebUtility.HtmlEncode(nombreCompleto)},</div>
-      <div class=""intro"">
-        Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en el sistema SIGAC. Puedes utilizar la siguiente contraseña provisoria / código de verificación para ingresar:
+    <div style='padding: 30px; color: #1e293b; line-height: 1.6;'>
+      <h2 style='color: #0f172a; font-size: 18px; margin-top: 0;'>Estimado(a) {WebUtility.HtmlEncode(nombreCompleto)},</h2>
+      <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en el sistema SIGAC. Puedes utilizar la siguiente contraseña provisoria / código de verificación para ingresar:</p>
+      <div style='background: #eff6ff; border: 1px dashed #3b82f6; border-radius: 8px; padding: 18px; text-align: center; margin: 20px 0;'>
+        <span style='font-family: Consolas, Monaco, monospace; font-size: 20px; font-weight: 700; color: #1d4ed8; letter-spacing: 2px;'>{WebUtility.HtmlEncode(resetTokenOrTemporaryPassword)}</span>
       </div>
-      <div class=""token-box"">
-        <span class=""token-val"">{WebUtility.HtmlEncode(resetTokenOrTemporaryPassword)}</span>
+      <div style='text-align: center; margin: 30px 0;'>
+        <a href='http://localhost:4200/login' style='background-color: #1e3a8a; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;'>Iniciar Sesión en SIGAC</a>
       </div>
-      <div class=""warning"">
-        Si tú no solicitaste este cambio, por favor ponte en contacto con la administración del sistema o el coordinador de tu carrera inmediatamente.
-      </div>
+      <p style='font-size: 12px; color: #64748b;'>Si tú no solicitaste este cambio, por favor ponte en contacto con la administración del sistema o el coordinador de tu carrera inmediatamente.</p>
     </div>
-    <div class=""footer"">
-      © {DateTime.UtcNow.Year} Universidad Técnica Estatal de Quevedo - SIGAC.<br>
-      Mensaje automático de seguridad.
+    <div style='background-color: #f8fafc; padding: 15px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;'>
+      © {DateTime.UtcNow.Year} Universidad Técnica Estatal de Quevedo • SIGAC
     </div>
   </div>
 </body>

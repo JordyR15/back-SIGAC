@@ -11,7 +11,12 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(c =>
@@ -56,7 +61,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddCors(); // Add CORS services
 
 // Cadena oficial del Pooler IPv4 de Supabase
-const string poolerConnection = "Host=aws-0-us-west-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.twqiaebuxluhvleijapf;Password=9p-a6@rr7Z/vbTg;SSL Mode=Require;Trust Server Certificate=true;";
+const string poolerConnection = "Host=aws-0-us-west-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.twqiaebuxluhvleijapf;Password=9p-a6@rr7Z/vbTg;SSL Mode=Require;Trust Server Certificate=true;Keepalive=30;";
 
 var defaultConn = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -80,7 +85,13 @@ else
 {
     // Persistencia formal relacional en PostgreSQL (Supabase Pooler IPv4)
     builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(defaultConn));
+        options.UseNpgsql(defaultConn, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(3),
+                errorCodesToAdd: null);
+        }));
 }
 
 builder.Services.AddScoped<ITokenService, TokenService>();

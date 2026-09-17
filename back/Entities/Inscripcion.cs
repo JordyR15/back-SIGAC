@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace back.Entities
 {
     public class Inscripcion
@@ -9,6 +11,9 @@ namespace back.Entities
         public Catedra? Catedra { get; set; }
         public int? ClaseId { get; set; }
         public Clase? Clase { get; set; }
+
+        [NotMapped]
+        public string? Estado { get; set; }
 
         // Para RF-001: Alertas Tempranas. Un promedio bajo podría generar una alerta.
         public double PromedioActual { get; set; }

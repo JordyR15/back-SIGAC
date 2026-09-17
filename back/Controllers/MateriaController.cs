@@ -494,7 +494,7 @@ namespace back.Controllers
         public async Task<IActionResult> AddRecurso(int materiaId, [FromBody] CreateRecursoDto createRecursoDto)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede añadir recursos a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede añadir recursos a esta materia." });
 
             var materia = await _context.Catedras.FindAsync(materiaId);
             if (materia == null) return NotFound(new { message = "Materia no encontrada." });
@@ -531,7 +531,7 @@ namespace back.Controllers
         public async Task<IActionResult> UploadRecursoFile(int materiaId, IFormFile archivo)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede subir archivos a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede subir archivos a esta materia." });
 
             if (archivo == null || archivo.Length == 0) return BadRequest(new { message = "Archivo requerido." });
 
@@ -621,7 +621,7 @@ namespace back.Controllers
             if (UserId == null) return Unauthorized();
 
             // Solo el docente responsable puede añadir temas
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede añadir temas a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede añadir temas a esta materia." });
 
             var materia = await _context.Catedras.FindAsync(materiaId);
             if (materia == null) return NotFound(new { message = "Materia no encontrada." });
@@ -648,7 +648,7 @@ namespace back.Controllers
         public async Task<IActionResult> AddActividad(int materiaId, [FromBody] CreateActividadDto createActividadDto)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede añadir actividades a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede añadir actividades a esta materia." });
 
             var materia = await _context.Catedras.FindAsync(materiaId);
             if (materia == null) return NotFound(new { message = "Materia no encontrada." });
@@ -717,7 +717,7 @@ namespace back.Controllers
                                         .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == recurso.MateriaId);
             if (!isStudentInMateria)
             {
-                return Forbid("No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia.");
+                return StatusCode(403, new { message = "No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia." });
             }
 
             // Verificar si ya está marcado como visto
@@ -753,7 +753,7 @@ namespace back.Controllers
                                         .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == materiaId);
             if (!isStudentInMateria)
             {
-                return Forbid("No tienes permiso para ver el estado de los recursos de esta materia.");
+                return StatusCode(403, new { message = "No tienes permiso para ver el estado de los recursos de esta materia." });
             }
 
             var recursos = await _context.Recursos
