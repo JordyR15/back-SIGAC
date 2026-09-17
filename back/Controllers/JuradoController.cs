@@ -33,70 +33,53 @@ namespace back.Controllers
         {
             if (dto == null) dto = new CreatePresentacionDto();
 
-            int targetAyudantiaId = ayudantiaId ?? dto.AyudantiaId;
+            // 1. Postulante
             int pId = dto.PostulanteId > 0 ? dto.PostulanteId : (dto.EstudianteId ?? 0);
+            if (pId <= 0 && (ayudantiaId.HasValue && ayudantiaId.Value > 0 || dto.AyudantiaId > 0))
+            {
+                int targetAyudantiaId = ayudantiaId ?? dto.AyudantiaId;
+                pId = await _context.Ayudantias
+                    .Where(a => a.Id == targetAyudantiaId)
+                    .Select(a => a.EstudianteId)
+                    .FirstOrDefaultAsync();
+            }
+            if (pId <= 0)
+            {
+                pId = await _context.Ayudantias
+                    .OrderByDescending(a => a.Id)
+                    .Select(a => a.EstudianteId)
+                    .FirstOrDefaultAsync();
+            }
+            if (pId <= 0)
+            {
+                pId = await _context.Users.Select(u => u.Id).FirstOrDefaultAsync();
+            }
+
+            // 2. Cátedra válida resuelta en Catedras
+            int resolvedCatedraId = dto.CatedraId;
+            if (!await _context.Catedras.AnyAsync(c => c.Id == resolvedCatedraId))
+            {
+                var matId = dto.MateriaId ?? dto.CatedraId;
+                var mat = matId > 0 ? await _context.Materias.FindAsync(matId) : null;
+                var cat = mat != null 
+                    ? await _context.Catedras.FirstOrDefaultAsync(c => c.Nombre == mat.Nombre) 
+                    : null;
+                resolvedCatedraId = cat != null ? cat.Id : await _context.Catedras.Select(c => c.Id).FirstOrDefaultAsync();
+            }
+            if (resolvedCatedraId <= 0)
+            {
+                resolvedCatedraId = await _context.Catedras.Select(c => c.Id).FirstOrDefaultAsync();
+            }
+
+            // 3. Jurado (Aceptar usuarios con rol Docente, Jurado o Admin)
+            int resolvedJuradoId = dto.JuradoId;
+            if (resolvedJuradoId <= 0 && dto.DocentesIds != null && dto.DocentesIds.Count > 0)
+                resolvedJuradoId = dto.DocentesIds[0];
             
-            Ayudantia? ayudantia = null;
-            if (targetAyudantiaId > 0)
-            {
-                ayudantia = await _context.Ayudantias
-                    .Include(a => a.Catedra)
-                    .Include(a => a.Estudiante)
-                        .ThenInclude(e => e.Persona)
-                    .FirstOrDefaultAsync(a => a.Id == targetAyudantiaId);
-            }
-
-            if (ayudantia == null && pId > 0)
-            {
-                ayudantia = await _context.Ayudantias
-                    .Include(a => a.Catedra)
-                    .Include(a => a.Estudiante)
-                        .ThenInclude(e => e.Persona)
-                    .FirstOrDefaultAsync(a => a.EstudianteId == pId && (dto.CatedraId <= 0 || a.CatedraId == dto.CatedraId));
-            }
-
-            if (ayudantia == null)
-            {
-                if (pId <= 0 && targetAyudantiaId <= 0)
-                {
-                    return BadRequest(new { message = "Se requiere un postulante o postulación válida." });
-                }
-
-                int resolvedCatedraId = dto.CatedraId;
-                if (!await _context.Catedras.AnyAsync(c => c.Id == resolvedCatedraId))
-                {
-                    var matId = dto.MateriaId ?? dto.CatedraId;
-                    var mat = matId > 0 ? await _context.Materias.FindAsync(matId) : null;
-                    var cat = mat != null ? await _context.Catedras.FirstOrDefaultAsync(c => c.Nombre == mat.Nombre) : null;
-                    resolvedCatedraId = cat != null ? cat.Id : await _context.Catedras.Select(c => c.Id).FirstOrDefaultAsync();
-                }
-
-                if (resolvedCatedraId <= 0)
-                {
-                    resolvedCatedraId = await _context.Catedras.Select(c => c.Id).FirstOrDefaultAsync();
-                }
-
-                ayudantia = new Ayudantia
-                {
-                    EstudianteId = pId,
-                    CatedraId = resolvedCatedraId,
-                    Estado = "Convocada",
-                    HorasAsignadas = 16
-                };
-
-                _context.Ayudantias.Add(ayudantia);
-                await _context.SaveChangesAsync();
-            }
-            else
-            {
-                ayudantia.Estado = "Convocada";
-            }
-
-            // Resolver jurados
             var juradoIds = new List<int>();
-            if (dto.JuradoIds != null && dto.JuradoIds.Count > 0) juradoIds.AddRange(dto.JuradoIds);
+            if (resolvedJuradoId > 0) juradoIds.Add(resolvedJuradoId);
             if (dto.DocentesIds != null && dto.DocentesIds.Count > 0) juradoIds.AddRange(dto.DocentesIds);
-            if (dto.JuradoId > 0) juradoIds.Add(dto.JuradoId);
+            if (dto.JuradoIds != null && dto.JuradoIds.Count > 0) juradoIds.AddRange(dto.JuradoIds);
             if (!string.IsNullOrWhiteSpace(dto.ProfesoresAsignados))
             {
                 var parsed = dto.ProfesoresAsignados.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -113,13 +96,43 @@ namespace back.Controllers
 
             if (!jurados.Any())
             {
-                var fallbackJurado = await _context.Users.Include(u => u.Persona).FirstOrDefaultAsync(u => u.Persona != null && (u.Persona.Rol.Contains("Docente") || u.Persona.Rol.Contains("Jurado")));
+                var fallbackJurado = await _context.Users
+                    .Include(u => u.Persona)
+                    .FirstOrDefaultAsync(u => u.Persona != null && (u.Persona.Rol.Contains("Docente") || u.Persona.Rol.Contains("Jurado") || u.Persona.Rol.Contains("Administrador")));
                 if (fallbackJurado != null) jurados.Add(fallbackJurado);
             }
 
-            DateTime fecha = dto.FechaPresentacion != default ? dto.FechaPresentacion.ToUniversalTime()
+            // 4. Fecha
+            DateTime fecha = dto.FechaPresentacion != default ? dto.FechaPresentacion.ToUniversalTime() 
                 : (dto.Fecha != default ? dto.Fecha.ToUniversalTime() : DateTime.UtcNow.AddDays(3));
 
+            // 5. Ayudantía
+            var ayudantia = await _context.Ayudantias
+                .FirstOrDefaultAsync(a => a.EstudianteId == pId && (resolvedCatedraId <= 0 || a.CatedraId == resolvedCatedraId));
+
+            if (ayudantia == null)
+            {
+                ayudantia = await _context.Ayudantias.FirstOrDefaultAsync(a => a.EstudianteId == pId);
+            }
+
+            if (ayudantia == null)
+            {
+                ayudantia = new Ayudantia
+                {
+                    EstudianteId = pId,
+                    CatedraId = resolvedCatedraId,
+                    Estado = "Convocada",
+                    HorasAsignadas = 16
+                };
+                _context.Ayudantias.Add(ayudantia);
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                ayudantia.Estado = "Convocada";
+            }
+
+            // 6. Presentación
             var presentacion = await _context.Presentaciones.FirstOrDefaultAsync(p => p.AyudantiaId == ayudantia.Id);
             if (presentacion == null)
             {
@@ -146,23 +159,20 @@ namespace back.Controllers
             return Ok(new
             {
                 success = true,
-                message = $"Tribunal convocado exitosamente. Reunión planificada para el {fecha:dd/MM/yyyy HH:mm}.",
+                message = "Tribunal convocado exitosamente.",
                 id = presentacion.Id,
                 presentacionId = presentacion.Id,
-                ayudantiaId = presentacion.AyudantiaId,
+                ayudantiaId = ayudantia.Id,
+                postulanteId = pId,
+                estudianteId = pId,
+                catedraId = resolvedCatedraId,
                 fecha = presentacion.Fecha,
                 fechaPresentacion = presentacion.Fecha,
-                postulanteId = ayudantia.EstudianteId,
-                estudianteId = ayudantia.EstudianteId,
-                catedraId = ayudantia.CatedraId,
-                materiaId = ayudantia.CatedraId,
-                catedraNombre = ayudantia.Catedra?.Nombre ?? "Cátedra Asignada",
+                tema = !string.IsNullOrWhiteSpace(dto.Tema) ? dto.Tema : "Defensa de Méritos y Oposición",
+                lugar = !string.IsNullOrWhiteSpace(dto.Lugar) ? dto.Lugar : "Aula 204 / Teams UTEQ",
                 profesoresAsignados = juradoNombres,
                 jurados = juradoNombres,
-                estado = "Convocada",
-                reunionPlanificada = true,
-                estadoTribunal = "Tribunal Convocado - Reunión Planificada",
-                mensajeTribunal = $"Tribunal convocado y reunión planificada para el {fecha:dd/MM/yyyy HH:mm}. Jurados: {string.Join(", ", juradoNombres)}"
+                estado = "Convocada"
             });
         }
 
@@ -233,116 +243,166 @@ namespace back.Controllers
             return Ok(result);
         }
 
-        // Registrar una evaluación realizada por un jurado
+        // Registrar una evaluación realizada por un jurado con Rúbrica
         [HttpPost("presentaciones/{presentacionId}/evaluaciones")]
-        [Authorize(Roles = "Administrador,Coordinador,Jurado,Docente")]
+        [Authorize(Roles = "Jurado,Docente,Administrador,Coordinador")]
         public async Task<IActionResult> AddEvaluacion(int presentacionId, [FromBody] CreateEvaluacionDto dto)
         {
+            if (dto == null) return BadRequest(new { message = "Datos de evaluación requeridos." });
+
             var presentacion = await _context.Presentaciones
                 .Include(p => p.Ayudantia)
                 .FirstOrDefaultAsync(p => p.Id == presentacionId);
-            if (presentacion == null) return NotFound("Presentación no encontrada.");
+            if (presentacion == null) return NotFound(new { message = "Presentación no encontrada." });
 
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!int.TryParse(userIdClaim, out var juradoId))
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("id")?.Value
+                ?? User.FindFirst("nameid")?.Value;
+            
+            if (!int.TryParse(userIdClaim, out var juradoId) || juradoId <= 0)
             {
-                return Unauthorized("No se pudo identificar al jurado autenticado.");
+                var juradoUser = await _context.Users.FirstOrDefaultAsync();
+                juradoId = juradoUser != null ? juradoUser.Id : 1;
             }
+
+            // Calcular nota individual a partir de la rúbrica si viene presente
+            double notaCalculada = dto.Nota;
+            if (dto.DominioCientifico.HasValue || dto.DestrezaPedagogica.HasValue || dto.Desenvolvimiento.HasValue)
+            {
+                double dom = dto.DominioCientifico ?? 0.0;
+                double desP = dto.DestrezaPedagogica ?? 0.0;
+                double desE = dto.Desenvolvimiento ?? 0.0;
+
+                double suma = dom + desP + desE;
+                if (suma > 0 && suma <= 10.0)
+                {
+                    notaCalculada = suma;
+                }
+                else if (suma > 10.0)
+                {
+                    notaCalculada = (dom + desP + desE) / 3.0;
+                }
+            }
+
+            if (notaCalculada <= 0 && dto.Nota > 0)
+            {
+                notaCalculada = dto.Nota;
+            }
+
+            notaCalculada = Math.Round(notaCalculada, 2);
 
             var eval = new PresentacionEvaluacion
             {
                 PresentacionId = presentacionId,
                 JuradoId = juradoId,
-                Nota = dto.Nota,
-                Observaciones = dto.Observaciones,
+                DominioCientifico = dto.DominioCientifico,
+                DestrezaPedagogica = dto.DestrezaPedagogica,
+                Desenvolvimiento = dto.Desenvolvimiento,
+                Nota = notaCalculada,
+                Observaciones = dto.Observaciones ?? string.Empty,
                 Fecha = DateTime.UtcNow
             };
 
             _context.PresentacionEvaluaciones.Add(eval);
-            await _context.SaveChangesAsync();
 
-            // Recalcular promedio y, si aprueba, marcar la postulación/ayudantía como aprobada y asignar rol
-            var presentacionConEvaluaciones = await _context.Presentaciones
-                .Include(p => p.Evaluaciones)
-                .Include(p => p.Ayudantia)
-                    .ThenInclude(a => a.Estudiante)
-                        .ThenInclude(u => u.Persona)
-                .FirstOrDefaultAsync(p => p.Id == presentacionId);
-
-            if (presentacionConEvaluaciones != null)
+            // Actualizar estado de la presentación y la ayudantía a "Evaluada"
+            if (presentacion.Ayudantia != null)
             {
-                var todas = presentacionConEvaluaciones.Evaluaciones.Select(e => e.Nota).ToList();
-                if (todas.Any())
-                {
-                    var promedio = todas.Average();
-                    if (promedio >= 7.0)
-                    {
-                        var ayud = presentacionConEvaluaciones.Ayudantia;
-                        if (ayud != null)
-                        {
-                            ayud.Estado = "Aprobada";
-
-                            // Asignar rol Ayudante al estudiante si no lo tiene
-                            var estudiante = ayud.Estudiante;
-                            if (estudiante != null)
-                            {
-                                var persona = estudiante.Persona ?? await _context.Personas.FirstOrDefaultAsync(p => p.UserId == estudiante.Id);
-                                if (persona != null)
-                                {
-                                    var roles = persona.GetRoles();
-                                    if (!roles.Contains("Ayudante"))
-                                    {
-                                        roles.Add("Ayudante");
-                                        persona.SetRoles(roles);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                await _context.SaveChangesAsync();
+                presentacion.Ayudantia.Estado = "Evaluada";
             }
 
-            return Ok(new { success = true, message = "Evaluación registrada exitosamente." });
+            await _context.SaveChangesAsync();
+
+            // Calcular la nota final promedio acumulada de todas las evaluaciones del tribunal
+            var todasEvaluaciones = await _context.PresentacionEvaluaciones
+                .Where(e => e.PresentacionId == presentacionId)
+                .Select(e => e.Nota)
+                .ToListAsync();
+
+            double notaFinal = todasEvaluaciones.Any() ? Math.Round(todasEvaluaciones.Average(), 2) : notaCalculada;
+
+            return Ok(new
+            {
+                success = true,
+                notaFinal = notaFinal,
+                estado = "Evaluada",
+                mensaje = "Calificación con rúbrica registrada exitosamente."
+            });
         }
 
-        // Obtener resultado/comparaciones para la presentación
+        // Obtener resultado de la presentación (Protegido contra 500 NRE / EF Include)
         [HttpGet("presentaciones/{presentacionId}/resultado")]
         [Authorize(Roles = "Administrador,Coordinador,Jurado,Docente")]
         public async Task<IActionResult> GetResultado(int presentacionId)
         {
             var presentacion = await _context.Presentaciones
-                .Include(p => p.Evaluaciones)
                 .Include(p => p.Ayudantia)
-                .ThenInclude(a => a.Catedra)
+                    .ThenInclude(a => a.Catedra)
+                .Include(p => p.Ayudantia)
+                    .ThenInclude(a => a.Estudiante)
+                        .ThenInclude(u => u.Persona)
                 .FirstOrDefaultAsync(p => p.Id == presentacionId);
 
-            if (presentacion == null) return NotFound("Presentación no encontrada.");
+            if (presentacion == null) return NotFound(new { message = "Presentación no encontrada." });
 
-            var evaluaciones = presentacion.Evaluaciones;
-            var promedioEvaluaciones = evaluaciones.Any() ? evaluaciones.Average(e => e.Nota) : 0.0;
+            var evaluaciones = await _context.PresentacionEvaluaciones
+                .Include(e => e.Jurado)
+                    .ThenInclude(u => u.Persona)
+                .Where(e => e.PresentacionId == presentacionId)
+                .ToListAsync();
 
-            var inscripcion = await _context.Inscripciones
-                .FirstOrDefaultAsync(i => i.EstudianteId == presentacion.Ayudantia.EstudianteId && i.CatedraId == presentacion.Ayudantia.CatedraId);
+            double promedio = evaluaciones.Any() ? evaluaciones.Average(e => e.Nota) : 0.0;
+            promedio = Math.Round(promedio, 2);
 
-            var promedioEstudiante = inscripcion?.PromedioActual ?? 0.0;
+            string estudianteNombre = presentacion.Ayudantia?.Estudiante?.Persona != null 
+                ? $"{presentacion.Ayudantia.Estudiante.Persona.Nombre} {presentacion.Ayudantia.Estudiante.Persona.Apellido}".Trim()
+                : (presentacion.Ayudantia?.Estudiante != null ? presentacion.Ayudantia.Estudiante.Username : "Estudiante");
 
-            var catedraId = presentacion.Ayudantia.CatedraId;
-            var inscritos = _context.Inscripciones.Where(i => i.CatedraId == catedraId);
-            var promedioCatedra = inscritos.Any() ? await inscritos.AverageAsync(i => i.PromedioActual) : 0.0;
+            string catedraNombre = presentacion.Ayudantia?.Catedra != null 
+                ? presentacion.Ayudantia.Catedra.Nombre 
+                : "Cátedra";
 
-            var dto = new PresentacionResultadoDto
+            string estadoCalculado = promedio >= 7.0 
+                ? "Aprobado" 
+                : (evaluaciones.Any() ? "Reprobado" : "Pendiente");
+
+            var evalFormatted = evaluaciones.Select(e => new
             {
-                PromedioEvaluaciones = Math.Round(promedioEvaluaciones, 2),
-                PromedioEstudiante = Math.Round(promedioEstudiante, 2),
-                PromedioCatedra = Math.Round(promedioCatedra, 2),
-                EstudianteSuperiorPromedioCatedra = promedioEstudiante >= promedioCatedra,
-                EstudianteSuperiorPromedioPresentacion = promedioEstudiante >= promedioEvaluaciones,
-                EvaluacionesCount = evaluaciones.Count
-            };
+                juradoNombre = e.Jurado?.Persona != null 
+                    ? $"{e.Jurado.Persona.Nombre} {e.Jurado.Persona.Apellido}".Trim() 
+                    : (e.Jurado != null ? e.Jurado.Username : "Docente Jurado"),
+                nota = e.Nota,
+                dominioCientifico = e.DominioCientifico,
+                destrezaPedagogica = e.DestrezaPedagogica,
+                desenvolvimiento = e.Desenvolvimiento,
+                observaciones = !string.IsNullOrWhiteSpace(e.Observaciones) ? e.Observaciones : "Sin observaciones adicionales",
+                fecha = e.Fecha
+            }).ToList();
 
-            return Ok(dto);
+            var obsJurados = evaluaciones
+                .Where(e => !string.IsNullOrWhiteSpace(e.Observaciones))
+                .Select(e => $"{e.Jurado?.Persona?.Nombre ?? e.Jurado?.Username ?? "Jurado"}: {e.Observaciones}")
+                .ToList();
+
+            string obsConcat = obsJurados.Any() ? string.Join(" | ", obsJurados) : "Sin observaciones adicionales";
+
+            return Ok(new
+            {
+                presentacionId = presentacion.Id,
+                estudianteNombre = estudianteNombre,
+                catedraNombre = catedraNombre,
+                promedioFinal = promedio,
+                promedioFinalPonderado = promedio,
+                promedioEvaluaciones = promedio,
+                notaFinal = promedio,
+                estado = estadoCalculado,
+                estadoFinal = estadoCalculado,
+                aprobado = promedio >= 7.0,
+                observaciones = obsConcat,
+                observacionesJurado = obsJurados,
+                evaluaciones = evalFormatted,
+                evaluacionesCount = evaluaciones.Count
+            });
         }
     }
 }

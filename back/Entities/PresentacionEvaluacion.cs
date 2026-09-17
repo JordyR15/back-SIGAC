@@ -12,8 +12,12 @@ namespace back.Entities
         public int JuradoId { get; set; }
         public User Jurado { get; set; }
 
+        public double? DominioCientifico { get; set; }
+        public double? DestrezaPedagogica { get; set; }
+        public double? Desenvolvimiento { get; set; }
+
         public double Nota { get; set; }
-        public string Observaciones { get; set; }
-        public DateTime Fecha { get; set; }
+        public string Observaciones { get; set; } = string.Empty;
+        public DateTime Fecha { get; set; } = DateTime.UtcNow;
     }
 }

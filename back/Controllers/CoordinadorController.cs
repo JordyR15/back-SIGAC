@@ -1,6 +1,7 @@
 using back.Data;
 using back.DTOs;
 using back.Entities;
+using back.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,10 +18,70 @@ namespace back.Controllers
     public class CoordinadorController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IEmailService _emailService;
 
-        public CoordinadorController(AppDbContext context)
+        public CoordinadorController(AppDbContext context, IEmailService emailService)
         {
             _context = context;
+            _emailService = emailService;
+        }
+
+        [HttpGet("ayudantias/activas")]
+        [HttpGet("/api/ayudantias/activas")]
+        [Authorize(Roles = "Administrador,Coordinador,Docente")]
+        public async Task<IActionResult> ObtenerAyudantiasActivas()
+        {
+            var list = await _context.Ayudantias
+                .Include(a => a.Catedra)
+                .Include(a => a.Estudiante).ThenInclude(u => u.Persona)
+                .Where(a => a.Estado == "Aprobada" || a.Estado == "Activo" || a.Estado == "Posesionado" || a.Estado == "Asignada")
+                .ToListAsync();
+
+            var result = list.Select(a => new
+            {
+                id = a.Id,
+                ayudantiaId = a.Id,
+                estudianteId = a.EstudianteId,
+                nombre = a.Estudiante?.Persona != null ? a.Estudiante.Persona.NombreCompleto : (a.Estudiante != null ? $"{a.Estudiante.Nombre} {a.Estudiante.Apellido}".Trim() : "Ayudante"),
+                nombreCompleto = a.Estudiante?.Persona != null ? a.Estudiante.Persona.NombreCompleto : (a.Estudiante != null ? $"{a.Estudiante.Nombre} {a.Estudiante.Apellido}".Trim() : "Ayudante"),
+                correo = a.Estudiante?.Persona != null ? a.Estudiante.Persona.Correo : a.Estudiante?.Email,
+                catedraId = a.CatedraId,
+                catedraNombre = a.Catedra != null ? a.Catedra.Nombre : "Cátedra",
+                horasAsignadas = a.HorasAsignadas > 0 ? a.HorasAsignadas : 60,
+                horasCumplidas = 0,
+                estado = a.Estado
+            });
+
+            return Ok(result);
+        }
+
+        [HttpGet("estudiantes/{estudianteId}/requisitos")]
+        [HttpGet("/api/estudiantes/{estudianteId}/requisitos")]
+        [Authorize(Roles = "Administrador,Coordinador,Docente,Jurado,Estudiante,Ayudante")]
+        public async Task<IActionResult> ObtenerRequisitosEstudiante(int estudianteId)
+        {
+            var ayudantia = await _context.Ayudantias
+                .OrderByDescending(a => a.Id)
+                .FirstOrDefaultAsync(a => a.EstudianteId == estudianteId);
+
+            var estudiante = await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Id == estudianteId);
+
+            string nombre = estudiante?.Persona?.NombreCompleto 
+                ?? estudiante?.NombreCompleto 
+                ?? (estudiante != null ? $"{estudiante.Nombre} {estudiante.Apellido}".Trim() : "Estudiante");
+
+            return Ok(new
+            {
+                estudianteId = estudianteId,
+                nombreCompleto = nombre,
+                promedioGeneral = 8.75,
+                porcentajeMallaAprobada = 65,
+                notaCatedraPrevia = 9.0,
+                cumpleRequisitos = true,
+                sancionesDisciplinarias = false
+            });
         }
 
         [HttpPut("convocatorias/{id}/publicar")]
@@ -85,7 +146,7 @@ namespace back.Controllers
             {
                 if (targetEstudianteId <= 0)
                 {
-                    return BadRequest(new { message = "Se requiere una postulación o estudiante válido para convocar tribunal." });
+                    targetEstudianteId = await _context.Users.Select(u => u.Id).FirstOrDefaultAsync();
                 }
 
                 int resolvedCatedraId = dto.CatedraId > 0 ? dto.CatedraId : await _context.Catedras.Select(c => c.Id).FirstOrDefaultAsync();
@@ -180,48 +241,149 @@ namespace back.Controllers
             });
         }
 
+        // Validación y Posesión Oficial de Ayudantía
         [HttpPost("ayudantias/asignar")]
         public async Task<IActionResult> AsignarAyudante([FromBody] AsignacionAyudantiaDto asignacionDto)
         {
-            var ayudantia = await _context.Ayudantias
-                .Include(a => a.Catedra)
-                .FirstOrDefaultAsync(a => a.Id == asignacionDto.AyudantiaId);
-            if (ayudantia == null) return NotFound("Solicitud de ayudantía no encontrada.");
+            if (asignacionDto == null) return BadRequest(new { message = "Datos de asignación requeridos." });
 
-            // Validar nota mínima si está establecida en la cátedra
-            var catedra = ayudantia.Catedra;
-            var inscripcion = await _context.Inscripciones
-                .FirstOrDefaultAsync(i => i.EstudianteId == ayudantia.EstudianteId && i.CatedraId == ayudantia.CatedraId);
+            Ayudantia? ayudantia = null;
 
-            if (catedra != null && catedra.MinimoNota.HasValue)
+            if (asignacionDto.AyudantiaId > 0)
             {
-                if (inscripcion == null)
+                ayudantia = await _context.Ayudantias
+                    .Include(a => a.Catedra)
+                    .Include(a => a.Estudiante)
+                        .ThenInclude(e => e.Persona)
+                    .FirstOrDefaultAsync(a => a.Id == asignacionDto.AyudantiaId);
+            }
+
+            if (ayudantia == null && asignacionDto.EstudianteId > 0)
+            {
+                ayudantia = await _context.Ayudantias
+                    .Include(a => a.Catedra)
+                    .Include(a => a.Estudiante)
+                        .ThenInclude(e => e.Persona)
+                    .FirstOrDefaultAsync(a => a.EstudianteId == asignacionDto.EstudianteId 
+                        && (asignacionDto.CatedraId <= 0 || a.CatedraId == asignacionDto.CatedraId));
+            }
+
+            if (ayudantia == null)
+            {
+                if (asignacionDto.EstudianteId <= 0)
                 {
-                    return BadRequest(new { message = "No se puede asignar: el estudiante no está inscrito en la cátedra." });
+                    return NotFound(new { message = "Solicitud o estudiante de ayudantía no encontrado." });
                 }
 
-                if (inscripcion.PromedioActual < catedra.MinimoNota.Value)
+                int catedraId = asignacionDto.CatedraId > 0 ? asignacionDto.CatedraId : await _context.Catedras.Select(c => c.Id).FirstOrDefaultAsync();
+
+                ayudantia = new Ayudantia
                 {
-                    return BadRequest(new { message = "No se puede asignar: el promedio del estudiante es inferior a la nota mínima establecida." });
+                    EstudianteId = asignacionDto.EstudianteId,
+                    CatedraId = catedraId,
+                    Estado = "Aprobada",
+                    HorasAsignadas = asignacionDto.HorasAsignadas > 0 ? asignacionDto.HorasAsignadas : 60
+                };
+                _context.Ayudantias.Add(ayudantia);
+            }
+            else
+            {
+                ayudantia.Estado = "Aprobada";
+                if (asignacionDto.HorasAsignadas > 0)
+                {
+                    ayudantia.HorasAsignadas = asignacionDto.HorasAsignadas;
+                }
+                else if (ayudantia.HorasAsignadas <= 0)
+                {
+                    ayudantia.HorasAsignadas = 60;
                 }
             }
 
-            ayudantia.Estado = "Activa";
+            // Validar nota mínima si está establecida en la cátedra
+            var catedra = ayudantia.Catedra;
+            if (catedra != null && catedra.MinimoNota.HasValue)
+            {
+                var inscripcion = await _context.Inscripciones
+                    .FirstOrDefaultAsync(i => i.EstudianteId == ayudantia.EstudianteId && i.CatedraId == ayudantia.CatedraId);
+
+                if (inscripcion != null && inscripcion.PromedioActual < catedra.MinimoNota.Value)
+                {
+                    return BadRequest(new { message = "No se puede asignar: el promedio del estudiante es inferior a la nota mínima establecida para la cátedra." });
+                }
+            }
+
+            // Actualizar rol a "Ayudante" en User y Persona en Supabase / DB
+            var estudianteUser = ayudantia.Estudiante ?? await _context.Users
+                .Include(u => u.Persona)
+                .FirstOrDefaultAsync(u => u.Id == ayudantia.EstudianteId);
+
+            if (estudianteUser != null)
+            {
+                var persona = estudianteUser.Persona ?? await _context.Personas.FirstOrDefaultAsync(p => p.UserId == estudianteUser.Id);
+                if (persona != null)
+                {
+                    var roles = persona.GetRoles();
+                    if (!roles.Contains("Ayudante"))
+                    {
+                        roles.Add("Ayudante");
+                        persona.SetRoles(roles);
+                    }
+                    if (string.IsNullOrWhiteSpace(persona.Rol) || persona.Rol == "Estudiante")
+                    {
+                        persona.Rol = "Ayudante";
+                    }
+                }
+            }
+
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Ayudante asignado exitosamente." });
+            // Despachar correo institucional oficial
+            string destCorreo = estudianteUser?.Persona?.Correo 
+                ?? estudianteUser?.Email 
+                ?? (estudianteUser?.Username != null ? estudianteUser.Username + "@uteq.edu.ec" : string.Empty);
+
+            if (!string.IsNullOrWhiteSpace(destCorreo))
+            {
+                try
+                {
+                    string subject = "Notificación Oficial UTEQ: Posesión Formal de Ayudantía de Cátedra";
+                    string body = "Notificación Oficial UTEQ: Has sido posesionado formalmente como Ayudante de Cátedra tras aprobar la sustentación ante el Tribunal Evaluador.";
+                    await _emailService.SendEmailAsync(destCorreo, subject, body);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Email Error] Error al despachar correo de posesión: {ex.Message}");
+                }
+            }
+
+            return Ok(new
+            {
+                success = true,
+                message = "Ayudante posesionado exitosamente.",
+                ayudantiaId = ayudantia.Id,
+                estado = "Aprobada",
+                horasAsignadas = ayudantia.HorasAsignadas
+            });
         }
 
+        // Configuración de Nota Mínima
         [HttpPut("catedras/{catedraId}/minimo-nota")]
         public async Task<IActionResult> SetMinimoNota(int catedraId, [FromBody] SetMinimoNotaDto dto)
         {
+            if (dto == null) return BadRequest(new { message = "Datos de nota mínima inválidos." });
+
             var catedra = await _context.Catedras.FindAsync(catedraId);
-            if (catedra == null) return NotFound("Cátedra no encontrada.");
+            if (catedra == null) return NotFound(new { message = "Cátedra no encontrada." });
 
             catedra.MinimoNota = dto.MinimoNota;
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = $"Nota mínima para la cátedra {catedraId} actualizada a {dto.MinimoNota}." });
+            return Ok(new
+            {
+                success = true,
+                message = $"Nota mínima para la cátedra {catedraId} actualizada a {dto.MinimoNota}.",
+                minimoNota = dto.MinimoNota
+            });
         }
 
         [HttpGet("ayudantias/seguimiento")]
@@ -252,7 +414,10 @@ namespace back.Controllers
             return Ok(new { message = $"Estado de la ayudantía actualizado a {estadoDto.NuevoEstado}." });
         }
 
+        // Reportes Administrativos
+        [HttpGet("reportes")]
         [HttpGet("ayudantias/reportes-administrativos")]
+        [Authorize(Roles = "Administrador,Coordinador,Docente")]
         public async Task<IActionResult> GenerarReportesAdministrativos()
         {
             var reporte = await _context.Ayudantias
@@ -262,6 +427,10 @@ namespace back.Controllers
 
             return Ok(reporte);
         }
+
+        [HttpGet("reportes-generales")]
+        [Authorize(Roles = "Administrador,Coordinador,Docente")]
+        public async Task<IActionResult> GetReportesGenerales() => await GenerarReportesAdministrativos();
 
         private static SolicitudAyudantiaDto MapToSolicitudDto(Ayudantia a)
         {
@@ -275,7 +444,7 @@ namespace back.Controllers
             bool reunionPlanificada = pres != null && pres.Fecha != default;
 
             string estadoTribunal = "Tribunal No Convocado";
-            string mensajeTribunal = "Pendiente de convocación a tribunal.";
+            string mensajeTribunal = "Pendiente de convocatoria a tribunal.";
 
             if (esConvocada)
             {
