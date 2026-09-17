@@ -491,40 +491,169 @@ namespace back.Controllers
             return Ok(new { success = true, message = "Materia eliminada exitosamente." });
         }
 
-        // Helper para verificar si el usuario es docente de la materia
+        // Helper para verificar si el usuario autenticado es el docente responsable de la Materia real.
+        // IMPORTANTE: MateriaId y CatedraId no son necesariamente iguales.
         private async Task<bool> IsDocenteOfMateria(int materiaId)
         {
             if (UserId == null) return false;
 
-            var materia = await _context.Catedras.AsNoTracking()
-                                .FirstOrDefaultAsync(m => m.Id == materiaId && m.DocenteId == UserId.Value);
-            return materia != null;
+            return await _context.Materias
+                .AsNoTracking()
+                .AnyAsync(m =>
+                    m.Id == materiaId &&
+                    m.DocenteResponsableId == UserId.Value);
         }
 
-        // Endpoint para añadir un recurso a una materia (solo docentes)
-        [HttpPost("{materiaId}/recursos")]
-        public async Task<IActionResult> AddRecurso(int materiaId, [FromBody] CreateRecursoDto createRecursoDto)
+        // Resuelve la cátedra asociada a una Materia sin asumir que ambos IDs coinciden.
+        private async Task<int?> GetCatedraIdByMateriaAsync(int materiaId)
         {
-            if (UserId == null) return Unauthorized();
+             if (UserId == null) return Unauthorized();
             if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede añadir recursos a esta materia." });
+             var materia = await _context.Materias
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == materiaId);
 
-            var materia = await _context.Catedras.FindAsync(materiaId);
-            if (materia == null) return NotFound(new { message = "Materia no encontrada." });
+            if (materia == null)
+                return null;
+
+            var nombreMateria = materia.Nombre?.Trim().ToLower();
+
+            var catedraId = await _context.Catedras
+                .AsNoTracking()
+                .Where(c =>
+                    c.DocenteId == materia.DocenteResponsableId &&
+                    c.Nombre != null &&
+                    c.Nombre.Trim().ToLower() == nombreMateria)
+                .Select(c => (int?)c.Id)
+                .FirstOrDefaultAsync();
+
+            return catedraId;
+        }
+
+        // Verifica que el estudiante esté relacionado con la materia mediante su cátedra o clase.
+        private async Task<bool> IsEstudianteOfMateria(int materiaId, int estudianteId)
+        {
+            var catedraId = await GetCatedraIdByMateriaAsync(materiaId);
+
+            var claseIds = await _context.Clases
+                .AsNoTracking()
+                .Where(c => c.MateriaId == materiaId)
+                .Select(c => c.Id)
+                .ToListAsync();
+
+            return await _context.Inscripciones
+                .AsNoTracking()
+                .AnyAsync(i =>
+                    i.EstudianteId == estudianteId &&
+                    ((catedraId.HasValue && i.CatedraId == catedraId.Value) ||
+                     (i.ClaseId.HasValue && claseIds.Contains(i.ClaseId.Value))));
+        }
+
+        // Endpoint para añadir un recurso a una materia (solo docente responsable)
+        [HttpPost("{materiaId}/recursos")]
+        public async Task<IActionResult> AddRecurso(
+            int materiaId,
+            [FromBody] CreateRecursoDto createRecursoDto)
+        {
+            if (UserId == null)
+                return Unauthorized();
+
+            if (createRecursoDto == null)
+                return BadRequest(new { message = "Los datos del recurso son obligatorios." });
+
+            if (!await IsDocenteOfMateria(materiaId))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Solo el docente responsable puede añadir recursos a esta materia." });
+            }
+
+            var materia = await _context.Materias.FindAsync(materiaId);
+            if (materia == null)
+                return NotFound(new { message = "Materia no encontrada." });
+
+            if (string.IsNullOrWhiteSpace(createRecursoDto.Titulo))
+                return BadRequest(new { message = "El título del recurso es obligatorio." });
+
+            if (string.IsNullOrWhiteSpace(createRecursoDto.Url))
+                return BadRequest(new { message = "Debe proporcionar el archivo o enlace del recurso." });
 
             var recurso = new Recurso
             {
-                Titulo = createRecursoDto.Titulo,
-                Descripcion = createRecursoDto.Descripcion,
-                Url = createRecursoDto.Url,
+                Titulo = createRecursoDto.Titulo.Trim(),
+                Descripcion = createRecursoDto.Descripcion?.Trim() ?? string.Empty,
+                Url = createRecursoDto.Url.Trim(),
                 EsEsencial = createRecursoDto.EsEsencial,
                 MateriaId = materiaId,
-                Links = createRecursoDto.Links ?? new System.Collections.Generic.List<string>()
+                Links = createRecursoDto.Links ?? new List<string>()
             };
 
             _context.Recursos.Add(recurso);
             await _context.SaveChangesAsync();
 
-            var recursoDto = new RecursoDto
+            return StatusCode(
+                StatusCodes.Status201Created,
+                new RecursoDto
+                {
+                    Id = recurso.Id,
+                    Titulo = recurso.Titulo,
+                    Descripcion = recurso.Descripcion,
+                    Url = recurso.Url,
+                    EsEsencial = recurso.EsEsencial,
+                    MateriaId = recurso.MateriaId,
+                    Links = recurso.Links ?? new List<string>()
+                });
+        }
+
+        // PUT /api/Materia/{materiaId}/recursos/{recursoId}
+        // Modifica un recurso existente de una materia del docente autenticado.
+        [HttpPut("{materiaId}/recursos/{recursoId}")]
+        public async Task<IActionResult> UpdateRecurso(
+            int materiaId,
+            int recursoId,
+            [FromBody] CreateRecursoDto dto)
+        {
+            if (UserId == null)
+                return Unauthorized();
+
+            if (dto == null)
+                return BadRequest(new { message = "Los datos del recurso son obligatorios." });
+
+            if (!await IsDocenteOfMateria(materiaId))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Solo el docente responsable puede modificar recursos de esta materia." });
+            }
+
+            var recurso = await _context.Recursos
+                .FirstOrDefaultAsync(r =>
+                    r.Id == recursoId &&
+                    r.MateriaId == materiaId);
+
+            if (recurso == null)
+            {
+                return NotFound(new
+                {
+                    message = "Recurso no encontrado en la materia indicada."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Titulo))
+                return BadRequest(new { message = "El título del recurso es obligatorio." });
+
+            if (string.IsNullOrWhiteSpace(dto.Url))
+                return BadRequest(new { message = "Debe proporcionar el archivo o enlace del recurso." });
+
+            recurso.Titulo = dto.Titulo.Trim();
+            recurso.Descripcion = dto.Descripcion?.Trim() ?? string.Empty;
+            recurso.Url = dto.Url.Trim();
+            recurso.EsEsencial = dto.EsEsencial;
+            recurso.Links = dto.Links ?? new List<string>();
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new RecursoDto
             {
                 Id = recurso.Id,
                 Titulo = recurso.Titulo,
@@ -532,10 +661,8 @@ namespace back.Controllers
                 Url = recurso.Url,
                 EsEsencial = recurso.EsEsencial,
                 MateriaId = recurso.MateriaId,
-                Links = recurso.Links ?? new System.Collections.Generic.List<string>()
-            };
-
-            return CreatedAtAction(nameof(GetRecursosByMateria), new { materiaId = materiaId }, recursoDto);
+                Links = recurso.Links ?? new List<string>()
+            });
         }
 
         // Upload file to Supabase Storage and return public URL (does not create recurso record)
@@ -543,61 +670,93 @@ namespace back.Controllers
         public async Task<IActionResult> UploadRecursoFile(int materiaId, IFormFile archivo)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede subir archivos a esta materia." });
+             if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede subir archivos a esta materia." });
+             if (!await IsDocenteOfMateria(materiaId))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Solo el docente responsable puede subir archivos a esta materia." });
+            }
 
-            if (archivo == null || archivo.Length == 0) return BadRequest(new { message = "Archivo requerido." });
+            if (archivo == null || archivo.Length == 0)
+                return BadRequest(new { message = "Archivo requerido." });
 
             var supabaseUrl = _config["Supabase:Url"];
             var supabaseKey = _config["Supabase:ServiceKey"];
             var bucket = _config["Supabase:StorageBucket"] ?? "public";
-            if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(supabaseKey))
-                return StatusCode(500, new { message = "Supabase storage no está configurado. Configure Supabase:Url y Supabase:ServiceKey en la configuración." });
 
-            // Use a unique filename to avoid collisions
-            var fileName = $"{System.Guid.NewGuid():N}_{System.IO.Path.GetFileName(archivo.FileName)}";
+            if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(supabaseKey))
+            {
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new
+                    {
+                        message = "Supabase storage no está configurado. Configure Supabase:Url y Supabase:ServiceKey en la configuración."
+                    });
+            }
+
+            var fileName = $"{Guid.NewGuid():N}_{System.IO.Path.GetFileName(archivo.FileName)}";
 
             using var client = new HttpClient();
             client.DefaultRequestHeaders.Add("apikey", supabaseKey);
-            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey);
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", supabaseKey);
 
             using var content = new MultipartFormDataContent();
             using var stream = archivo.OpenReadStream();
             var fileContent = new StreamContent(stream);
-            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(archivo.ContentType ?? "application/octet-stream");
+            fileContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(
+                    archivo.ContentType ?? "application/octet-stream");
             content.Add(fileContent, "file", fileName);
 
-            // POST to Supabase storage; include name query param to set path
-            var uploadUrl = $"{supabaseUrl.TrimEnd('/')}/storage/v1/object/{bucket}?name={Uri.EscapeDataString(fileName)}";
+            var uploadUrl =
+                $"{supabaseUrl.TrimEnd('/')}/storage/v1/object/{bucket}?name={Uri.EscapeDataString(fileName)}";
+
             var resp = await client.PostAsync(uploadUrl, content);
             var respBody = await resp.Content.ReadAsStringAsync();
+
             if (!resp.IsSuccessStatusCode)
             {
-                return StatusCode((int)resp.StatusCode, new { message = "Upload failed", detail = respBody });
+                return StatusCode(
+                    (int)resp.StatusCode,
+                    new { message = "Upload failed", detail = respBody });
             }
 
-            // Construct public URL (Supabase exposes public objects at /storage/v1/object/public/{bucket}/{path})
-            var publicUrl = $"{supabaseUrl.TrimEnd('/')}/storage/v1/object/public/{bucket}/{Uri.EscapeDataString(fileName)}";
+            var publicUrl =
+                $"{supabaseUrl.TrimEnd('/')}/storage/v1/object/public/{bucket}/{Uri.EscapeDataString(fileName)}";
+
             return Ok(new { url = publicUrl, key = fileName, raw = respBody });
         }
 
-        // Endpoint para obtener todos los recursos de una materia (todos los usuarios autorizados)
+        // Endpoint para obtener todos los recursos de una materia.
         [HttpGet("{materiaId}/recursos")]
         public async Task<ActionResult<IEnumerable<RecursoDto>>> GetRecursosByMateria(int materiaId)
         {
-            if (UserId == null) return Unauthorized();
+            if (UserId == null)
+                return Unauthorized();
+
+            var materiaExiste = await _context.Materias
+                .AsNoTracking()
+                .AnyAsync(m => m.Id == materiaId);
+
+            if (!materiaExiste)
+                return NotFound(new { message = "Materia no encontrada." });
 
             var recursos = await _context.Recursos
-                                .Where(r => r.MateriaId == materiaId)
-                                .Select(r => new RecursoDto
-                                {
-                                    Id = r.Id,
-                                    Titulo = r.Titulo,
-                                    Descripcion = r.Descripcion,
-                                    Url = r.Url,
-                                    EsEsencial = r.EsEsencial,
-                                    MateriaId = r.MateriaId
-                                })
-                                .ToListAsync();
+                .AsNoTracking()
+                .Where(r => r.MateriaId == materiaId)
+                .OrderBy(r => r.Id)
+                .Select(r => new RecursoDto
+                {
+                    Id = r.Id,
+                    Titulo = r.Titulo,
+                    Descripcion = r.Descripcion,
+                    Url = r.Url,
+                    EsEsencial = r.EsEsencial,
+                    MateriaId = r.MateriaId
+                })
+                .ToListAsync();
 
             return Ok(recursos);
         }
@@ -630,11 +789,18 @@ namespace back.Controllers
         {
             if (UserId == null) return Unauthorized();
 
-            // Solo el docente responsable puede añadir temas
+             // Solo el docente responsable puede añadir temas
             if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede añadir temas a esta materia." });
+             if (!await IsDocenteOfMateria(materiaId))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Solo el docente responsable puede añadir temas a esta materia." });
+            }
 
-            var materia = await _context.Catedras.FindAsync(materiaId);
-            if (materia == null) return NotFound(new { message = "Materia no encontrada." });
+            var materia = await _context.Materias.FindAsync(materiaId);
+            if (materia == null)
+                return NotFound(new { message = "Materia no encontrada." });
 
             var tema = new Entities.Tema
             {
@@ -650,33 +816,137 @@ namespace back.Controllers
             temaDto.Id = tema.Id;
             temaDto.MateriaId = tema.MateriaId;
 
-            return CreatedAtAction(nameof(GetTemasByMateria), new { materiaId = materiaId }, temaDto);
+            return CreatedAtAction(
+                nameof(GetTemasByMateria),
+                new { materiaId },
+                temaDto);
         }
 
-        // Endpoint para añadir una actividad a una materia (solo docentes)
-        [HttpPost("{materiaId}/actividades")]
-        public async Task<IActionResult> AddActividad(int materiaId, [FromBody] CreateActividadDto createActividadDto)
+        // Normaliza fechas recibidas desde Swagger/frontend para PostgreSQL timestamp with time zone.
+        // Si la fecha llega sin zona horaria (Kind.Unspecified), se conserva la hora enviada
+        // y se marca como UTC para evitar errores de Npgsql.
+        private static System.DateTime NormalizarFechaUtc(System.DateTime fecha)
         {
-            if (UserId == null) return Unauthorized();
+             if (UserId == null) return Unauthorized();
             if (!await IsDocenteOfMateria(materiaId)) return StatusCode(403, new { message = "Solo el docente responsable puede añadir actividades a esta materia." });
+             return fecha.Kind switch
+            {
+                System.DateTimeKind.Utc => fecha,
+                System.DateTimeKind.Local => fecha.ToUniversalTime(),
+                _ => System.DateTime.SpecifyKind(fecha, System.DateTimeKind.Utc)
+            };
+        }
 
-            var materia = await _context.Catedras.FindAsync(materiaId);
-            if (materia == null) return NotFound(new { message = "Materia no encontrada." });
+        // Endpoint para añadir una actividad a una materia (solo docente responsable)
+        [HttpPost("{materiaId}/actividades")]
+        public async Task<IActionResult> AddActividad(
+            int materiaId,
+            [FromBody] CreateActividadDto createActividadDto)
+        {
+            if (UserId == null)
+                return Unauthorized();
+
+            if (createActividadDto == null)
+                return BadRequest(new { message = "Los datos de la actividad son obligatorios." });
+
+            if (!await IsDocenteOfMateria(materiaId))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Solo el docente responsable puede añadir actividades a esta materia." });
+            }
+
+            var materia = await _context.Materias.FindAsync(materiaId);
+            if (materia == null)
+                return NotFound(new { message = "Materia no encontrada." });
+
+            if (string.IsNullOrWhiteSpace(createActividadDto.Titulo))
+                return BadRequest(new { message = "El título de la actividad es obligatorio." });
+
+            if (string.IsNullOrWhiteSpace(createActividadDto.Tipo))
+                return BadRequest(new { message = "El tipo de actividad es obligatorio." });
+
+            if (createActividadDto.FechaEntrega == default)
+                return BadRequest(new { message = "La fecha límite de entrega es obligatoria." });
 
             var actividad = new Actividad
             {
-                Titulo = createActividadDto.Titulo,
-                Descripcion = createActividadDto.Descripcion,
-                FechaEntrega = createActividadDto.FechaEntrega,
-                Tipo = createActividadDto.Tipo,
-                Estado = "Pendiente", // Estado inicial por defecto
+                Titulo = createActividadDto.Titulo.Trim(),
+                Descripcion = createActividadDto.Descripcion?.Trim() ?? string.Empty,
+                FechaEntrega = NormalizarFechaUtc(createActividadDto.FechaEntrega),
+                Tipo = createActividadDto.Tipo.Trim(),
+                Estado = "Pendiente",
                 MateriaId = materiaId
             };
 
             _context.Actividades.Add(actividad);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetActividadesByMateria), new { materiaId = materiaId }, new ActividadDto
+            return StatusCode(
+                StatusCodes.Status201Created,
+                new ActividadDto
+                {
+                    Id = actividad.Id,
+                    Titulo = actividad.Titulo,
+                    Descripcion = actividad.Descripcion,
+                    FechaEntrega = actividad.FechaEntrega,
+                    Tipo = actividad.Tipo,
+                    Estado = actividad.Estado,
+                    MateriaId = actividad.MateriaId
+                });
+        }
+
+        // PUT /api/Materia/{materiaId}/actividades/{actividadId}
+        // Modifica una actividad existente de la materia del docente autenticado.
+        [HttpPut("{materiaId}/actividades/{actividadId}")]
+        public async Task<IActionResult> UpdateActividad(
+            int materiaId,
+            int actividadId,
+            [FromBody] CreateActividadDto dto)
+        {
+            if (UserId == null)
+                return Unauthorized();
+
+            if (dto == null)
+                return BadRequest(new { message = "Los datos de la actividad son obligatorios." });
+
+            if (!await IsDocenteOfMateria(materiaId))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "Solo el docente responsable puede modificar actividades de esta materia." });
+            }
+
+            var actividad = await _context.Actividades
+                .FirstOrDefaultAsync(a =>
+                    a.Id == actividadId &&
+                    a.MateriaId == materiaId);
+
+            if (actividad == null)
+            {
+                return NotFound(new
+                {
+                    message = "Actividad no encontrada en la materia indicada."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Titulo))
+                return BadRequest(new { message = "El título de la actividad es obligatorio." });
+
+            if (string.IsNullOrWhiteSpace(dto.Tipo))
+                return BadRequest(new { message = "El tipo de actividad es obligatorio." });
+
+            if (dto.FechaEntrega == default)
+                return BadRequest(new { message = "La fecha límite de entrega es obligatoria." });
+
+            actividad.Titulo = dto.Titulo.Trim();
+            actividad.Descripcion = dto.Descripcion?.Trim() ?? string.Empty;
+            actividad.FechaEntrega = NormalizarFechaUtc(dto.FechaEntrega);
+            actividad.Tipo = dto.Tipo.Trim();
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ActividadDto
             {
                 Id = actividad.Id,
                 Titulo = actividad.Titulo,
@@ -688,24 +958,35 @@ namespace back.Controllers
             });
         }
 
-        // Endpoint para obtener todas las actividades de una materia (todos los usuarios autorizados)
+        // Endpoint para obtener todas las actividades de una materia.
         [HttpGet("{materiaId}/actividades")]
         public async Task<ActionResult<IEnumerable<ActividadDto>>> GetActividadesByMateria(int materiaId)
         {
-            if (UserId == null) return Unauthorized();
+            if (UserId == null)
+                return Unauthorized();
+
+            var materiaExiste = await _context.Materias
+                .AsNoTracking()
+                .AnyAsync(m => m.Id == materiaId);
+
+            if (!materiaExiste)
+                return NotFound(new { message = "Materia no encontrada." });
 
             var actividades = await _context.Actividades
-                                .Where(a => a.MateriaId == materiaId)
-                                .Select(a => new ActividadDto
-                                {
-                                    Id = a.Id,
-                                    Titulo = a.Titulo,
-                                    Descripcion = a.Descripcion,
-                                    FechaEntrega = a.FechaEntrega,
-                                    Tipo = a.Tipo,
-                                    Estado = a.Estado,
-                                    MateriaId = a.MateriaId
-                                }).ToListAsync();
+                .AsNoTracking()
+                .Where(a => a.MateriaId == materiaId)
+                .OrderBy(a => a.FechaEntrega)
+                .Select(a => new ActividadDto
+                {
+                    Id = a.Id,
+                    Titulo = a.Titulo,
+                    Descripcion = a.Descripcion,
+                    FechaEntrega = a.FechaEntrega,
+                    Tipo = a.Tipo,
+                    Estado = a.Estado,
+                    MateriaId = a.MateriaId
+                })
+                .ToListAsync();
 
             return Ok(actividades);
         }
@@ -720,13 +1001,15 @@ namespace back.Controllers
             var recurso = await _context.Recursos.FindAsync(markRecursoAsSeenDto.RecursoId);
             if (recurso == null) return NotFound(new { message = "Recurso no encontrado." });
 
-            // Verificar si el estudiante está inscrito en la materia del recurso
-            var isStudentInMateria = await _context.Inscripciones
-                                        .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == recurso.MateriaId);
+            // Verificar inscripción usando la relación real Materia -> Cátedra/Clase.
+            var isStudentInMateria = await IsEstudianteOfMateria(recurso.MateriaId, UserId.Value);
             if (!isStudentInMateria)
             {
-                return StatusCode(403, new { message = "No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia." });
-            }
+                 return StatusCode(403, new { message = "No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia." });
+                 return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia." });
+             }
 
             // Verificar si ya está marcado como visto
             var existingEntry = await _context.RecursosVistosPorEstudiante
@@ -756,13 +1039,15 @@ namespace back.Controllers
         {
             if (UserId == null) return Unauthorized();
 
-            // Verificar si el estudiante está inscrito en la materia
-            var isStudentInMateria = await _context.Inscripciones
-                                        .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == materiaId);
+            // Verificar inscripción usando la relación real Materia -> Cátedra/Clase.
+            var isStudentInMateria = await IsEstudianteOfMateria(materiaId, UserId.Value);
             if (!isStudentInMateria)
             {
-                return StatusCode(403, new { message = "No tienes permiso para ver el estado de los recursos de esta materia." });
-            }
+                 return StatusCode(403, new { message = "No tienes permiso para ver el estado de los recursos de esta materia." });
+                 return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new { message = "No tienes permiso para ver el estado de los recursos de esta materia." });
+             }
 
             var recursos = await _context.Recursos
                                 .Where(r => r.MateriaId == materiaId)

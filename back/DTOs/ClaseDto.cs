@@ -8,6 +8,8 @@ namespace back.DTOs
         public int ClaseId { get; set; }
         public string Nombre { get; set; } = string.Empty;
         public int MateriaId { get; set; }
+        public int? CatedraId { get; set; }
+        public string PeriodoAcademico { get; set; } = string.Empty;
         public string MateriaNombre { get; set; } = string.Empty;
         public string MateriaCodigo { get; set; } = string.Empty;
         public int DocenteId { get; set; }

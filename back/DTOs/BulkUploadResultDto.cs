@@ -4,7 +4,9 @@ namespace back.DTOs
 {
     public class BulkUploadResultDto
     {
+        public int ImportJobId { get; set; }
         public int CreatedCount { get; set; }
+        public int RejectedCount { get; set; }
         public List<string> CreatedUsernames { get; set; } = new List<string>();
         public List<string> Errors { get; set; } = new List<string>();
     }

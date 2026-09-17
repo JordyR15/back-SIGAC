@@ -256,6 +256,177 @@ namespace back.Controllers
         }
 
         // =========================================================
+        // RF-016 - MATERIAS ACTIVAS DEL DOCENTE AUTENTICADO
+        // =========================================================
+
+        // GET /api/Docente/materias-activas
+        [HttpGet("materias-activas")]
+        [Authorize(Roles = "Docente")]
+        public async Task<IActionResult> GetMateriasActivasDocente()
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!int.TryParse(value, out var docenteId))
+            {
+                return Unauthorized(new
+                {
+                    message = "Usuario no autenticado."
+                });
+            }
+
+            var docente = await _context.Users
+                .Include(u => u.Persona)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == docenteId);
+
+            if (docente == null)
+            {
+                return Unauthorized(new
+                {
+                    message = "Usuario no encontrado."
+                });
+            }
+
+            var roles = docente.Persona?.GetRoles()
+                        ?? new List<string>();
+
+            var esDocente = User.IsInRole("Docente") ||
+                            roles.Any(r =>
+                                r.Equals(
+                                    "Docente",
+                                    System.StringComparison.OrdinalIgnoreCase) ||
+                                r.Equals(
+                                    "Profesor",
+                                    System.StringComparison.OrdinalIgnoreCase));
+
+            if (!esDocente)
+                return Forbid();
+
+            var catedrasDocente = await _context.Catedras
+                .AsNoTracking()
+                .Where(c => c.DocenteId == docenteId)
+                .ToListAsync();
+
+            if (catedrasDocente.Count == 0)
+                return Ok(new List<object>());
+
+            // Mientras el modelo no tenga una entidad de periodo académico
+            // con bandera "Activo", se toma como vigente el semestre más
+            // reciente asignado al docente.
+            var semestreActual = catedrasDocente
+                .Where(c => !string.IsNullOrWhiteSpace(c.Semestre))
+                .Select(c => c.Semestre.Trim())
+                .OrderByDescending(s => s)
+                .FirstOrDefault();
+
+            var catedrasActivas = string.IsNullOrWhiteSpace(semestreActual)
+                ? catedrasDocente
+                : catedrasDocente
+                    .Where(c => string.Equals(
+                        c.Semestre?.Trim(),
+                        semestreActual,
+                        System.StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+            var catedraIds = catedrasActivas
+                .Select(c => c.Id)
+                .ToList();
+
+            var inscripciones = await _context.Inscripciones
+                .AsNoTracking()
+                .Where(i =>
+                    i.CatedraId.HasValue &&
+                    catedraIds.Contains(i.CatedraId.Value) &&
+                    i.ClaseId.HasValue)
+                .Select(i => new
+                {
+                    CatedraId = i.CatedraId!.Value,
+                    ClaseId = i.ClaseId!.Value
+                })
+                .Distinct()
+                .ToListAsync();
+
+            var materiasDocente = await _context.Materias
+                .AsNoTracking()
+                .Where(m => m.DocenteResponsableId == docenteId)
+                .ToListAsync();
+
+            var clasesDocente = await _context.Clases
+                .Include(c => c.Materia)
+                .AsNoTracking()
+                .Where(c => c.DocenteId == docenteId)
+                .ToListAsync();
+
+            var resultado = catedrasActivas
+                .OrderBy(c => c.Nombre)
+                .Select(catedra =>
+                {
+                    var claseIdsRelacionadas = inscripciones
+                        .Where(i => i.CatedraId == catedra.Id)
+                        .Select(i => i.ClaseId)
+                        .Distinct()
+                        .ToHashSet();
+
+                    var clasesRelacionadas = clasesDocente
+                        .Where(c => claseIdsRelacionadas.Contains(c.Id))
+                        .ToList();
+
+                    var materiaRelacionada = clasesRelacionadas
+                        .Where(c => c.Materia != null)
+                        .Select(c => c.Materia)
+                        .FirstOrDefault();
+
+                    if (materiaRelacionada == null)
+                    {
+                        materiaRelacionada = materiasDocente
+                            .FirstOrDefault(m =>
+                                string.Equals(
+                                    m.Nombre?.Trim(),
+                                    catedra.Nombre?.Trim(),
+                                    System.StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    if (materiaRelacionada != null)
+                    {
+                        clasesRelacionadas = clasesDocente
+                            .Where(c => c.MateriaId == materiaRelacionada.Id)
+                            .OrderBy(c => c.Nombre)
+                            .ToList();
+                    }
+                    else
+                    {
+                        clasesRelacionadas = clasesRelacionadas
+                            .OrderBy(c => c.Nombre)
+                            .ToList();
+                    }
+
+                    return new
+                    {
+                        catedraId = catedra.Id,
+                        materiaId = materiaRelacionada != null
+                            ? (int?)materiaRelacionada.Id
+                            : null,
+                        nombre = catedra.Nombre,
+                        codigo = materiaRelacionada?.Codigo
+                                 ?? $"CAT-{catedra.Id}",
+                        descripcion = materiaRelacionada?.Descripcion
+                                      ?? string.Empty,
+                        semestre = catedra.Semestre,
+                        docenteId = catedra.DocenteId,
+                        clases = clasesRelacionadas.Select(clase => new
+                        {
+                            claseId = clase.Id,
+                            nombre = clase.Nombre,
+                            materiaId = clase.MateriaId
+                        }).ToList()
+                    };
+                })
+                .ToList();
+
+            return Ok(resultado);
+        }
+
+        // =========================================================
         // OBTENER CLASES INTERNAMENTE
         // =========================================================
        private async Task<IActionResult> GetClasesDocenteInternal(
@@ -1153,19 +1324,188 @@ namespace back.Controllers
 
 
         // =========================================================
-        // PLANIFICACIÃ“N DE AYUDANTÃAS
+        // AYUDANTES ASIGNADOS POR CÁTEDRA
+        // Soporte de integración frontend para RF-008 / RF-010 / RF-024
         // =========================================================
 
+        // GET /api/Docente/catedras/{catedraId}/ayudantes
+        // Devuelve los ayudantes reales asignados a una cátedra del docente autenticado.
+        [HttpGet("catedras/{catedraId}/ayudantes")]
+        [Authorize(Roles = "Docente")]
+        public async Task<IActionResult> ObtenerAyudantesPorCatedra(int catedraId)
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var docenteId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
+            var catedra = await _context.Catedras
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == catedraId);
+
+            if (catedra == null)
+                return NotFound(new { message = "Cátedra no encontrada." });
+
+            if (catedra.DocenteId != docenteId)
+            {
+                return StatusCode(403, new
+                {
+                    message = "Solo el docente responsable puede consultar los ayudantes de esta cátedra."
+                });
+            }
+
+            var ayudantes = await _context.Ayudantias
+                .Include(a => a.Estudiante)
+                    .ThenInclude(e => e.Persona)
+                .AsNoTracking()
+                .Where(a =>
+                    a.CatedraId == catedraId &&
+                    (a.Estado == "Aprobada" ||
+                     a.Estado == "Asignada" ||
+                     a.Estado == "Activa"))
+                .OrderBy(a => a.Id)
+                .Select(a => new
+                {
+                    id = a.EstudianteId,
+                    ayudantiaId = a.Id,
+                    catedraId = a.CatedraId,
+                    estudianteId = a.EstudianteId,
+                    nombre = a.Estudiante != null && a.Estudiante.Persona != null
+                        ? (a.Estudiante.Persona.Nombre + " " + a.Estudiante.Persona.Apellido).Trim()
+                        : a.Estudiante != null
+                            ? a.Estudiante.Username
+                            : "Ayudante",
+                    correo = a.Estudiante != null && a.Estudiante.Persona != null
+                        ? a.Estudiante.Persona.Correo
+                        : string.Empty,
+                    estado = a.Estado
+                })
+                .ToListAsync();
+
+            return Ok(ayudantes);
+        }
+
+        // =========================================================
+        // RF-008 - PLANIFICACIÃ“N DE AYUDANTÃAS
+        // =========================================================
+
+        // GET /api/Docente/ayudantias/{ayudantiaId}/planificacion
+        // Docente responsable o ayudante asignado pueden consultar la planificaciÃ³n.
+        [HttpGet("ayudantias/{ayudantiaId}/planificacion")]
+        public async Task<IActionResult> ObtenerPlanificacionAyudantia(int ayudantiaId)
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var userId))
+                return Unauthorized();
+
+            var ayudantia = await _context.Ayudantias
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
+
+            if (ayudantia == null)
+                return NotFound(new { message = "AyudantÃ­a no encontrada." });
+
+            var esDocenteResponsable = await _context.Catedras
+                .AsNoTracking()
+                .AnyAsync(c => c.Id == ayudantia.CatedraId && c.DocenteId == userId);
+
+            var esAyudanteAsignado = ayudantia.EstudianteId == userId;
+
+            if (!esDocenteResponsable && !esAyudanteAsignado)
+            {
+                return StatusCode(403, new
+                {
+                    message = "No tienes permiso para consultar la planificaciÃ³n de esta ayudantÃ­a."
+                });
+            }
+
+            var planificacion = await _context.ActividadesAyudantia
+                .AsNoTracking()
+                .Where(a => a.AyudantiaId == ayudantiaId)
+                .OrderBy(a => a.FechaPlanificada)
+                .Select(a => new ActividadAyudantiaDto
+                {
+                    Id = a.Id,
+                    AyudantiaId = a.AyudantiaId,
+                    Descripcion = a.Descripcion,
+                    FechaPlanificada = a.FechaPlanificada,
+                    Completada = a.Completada
+                })
+                .ToListAsync();
+
+            return Ok(planificacion);
+        }
+
+        // POST /api/Docente/ayudantias/{ayudantiaId}/planificacion
+        // Solo el docente responsable de la cÃ¡tedra puede planificar.
         [HttpPost("ayudantias/{ayudantiaId}/planificacion")]
         public async Task<IActionResult> PlanificarActividadesAyudantia(
             int ayudantiaId,
             [FromBody] ActividadAyudantiaDto actividadDto)
         {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var docenteId))
+                return Unauthorized();
+
+            if (actividadDto == null)
+                return BadRequest(new { message = "Datos de planificaciÃ³n requeridos." });
+
+            if (string.IsNullOrWhiteSpace(actividadDto.Descripcion))
+                return BadRequest(new { message = "Debe indicar el tema o descripciÃ³n de la actividad." });
+
+            if (actividadDto.FechaPlanificada == default)
+                return BadRequest(new { message = "Debe indicar la fecha y horario de la actividad." });
+
+            var ayudantia = await _context.Ayudantias
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
+
+            if (ayudantia == null)
+                return NotFound(new { message = "AyudantÃ­a no encontrada." });
+
+            var esDocenteResponsable = await _context.Catedras
+                .AsNoTracking()
+                .AnyAsync(c => c.Id == ayudantia.CatedraId && c.DocenteId == docenteId);
+
+            if (!esDocenteResponsable)
+            {
+                return StatusCode(403, new
+                {
+                    message = "Solo el docente responsable de la cÃ¡tedra puede planificar actividades de ayudantÃ­a."
+                });
+            }
+
+            var fechaPlanificada = actividadDto.FechaPlanificada.Kind == System.DateTimeKind.Unspecified
+                ? System.DateTime.SpecifyKind(actividadDto.FechaPlanificada, System.DateTimeKind.Utc)
+                : actividadDto.FechaPlanificada.ToUniversalTime();
+
+            // Con el modelo actual el horario se representa mediante FechaPlanificada
+            // (fecha + hora). Se evita que el mismo ayudante tenga dos actividades
+            // programadas en el mismo instante.
+            var ayudantiasDelMismoAyudante = await _context.Ayudantias
+                .AsNoTracking()
+                .Where(a => a.EstudianteId == ayudantia.EstudianteId)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            var existeConflicto = await _context.ActividadesAyudantia
+                .AsNoTracking()
+                .AnyAsync(a =>
+                    ayudantiasDelMismoAyudante.Contains(a.AyudantiaId) &&
+                    a.FechaPlanificada == fechaPlanificada);
+
+            if (existeConflicto)
+            {
+                return Conflict(new
+                {
+                    message = "El ayudante ya tiene una actividad planificada en esa fecha y horario."
+                });
+            }
+
             var actividad = new ActividadAyudantia
             {
                 AyudantiaId = ayudantiaId,
-                Descripcion = actividadDto.Descripcion,
-                FechaPlanificada = actividadDto.FechaPlanificada,
+                Descripcion = actividadDto.Descripcion.Trim(),
+                FechaPlanificada = fechaPlanificada,
                 Completada = false
             };
 
@@ -1173,67 +1513,735 @@ namespace back.Controllers
             await _context.SaveChangesAsync();
 
             actividadDto.Id = actividad.Id;
+            actividadDto.AyudantiaId = actividad.AyudantiaId;
+            actividadDto.Descripcion = actividad.Descripcion;
+            actividadDto.FechaPlanificada = actividad.FechaPlanificada;
+            actividadDto.Completada = actividad.Completada;
 
             return CreatedAtAction(
-                nameof(PlanificarActividadesAyudantia),
-                new { id = actividad.Id },
+                nameof(ObtenerPlanificacionAyudantia),
+                new { ayudantiaId = ayudantiaId },
                 actividadDto);
         }
 
-        // =========================================================
-        // MONITOREO DE AYUDANTÃA
+        // PUT /api/Docente/ayudantias/{ayudantiaId}/planificacion/{actividadId}
+        // Permite al docente modificar una actividad programada.
+        [HttpPut("ayudantias/{ayudantiaId}/planificacion/{actividadId}")]
+        public async Task<IActionResult> ModificarPlanificacionAyudantia(
+            int ayudantiaId,
+            int actividadId,
+            [FromBody] ActividadAyudantiaDto actividadDto)
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var docenteId))
+                return Unauthorized();
+
+            if (actividadDto == null)
+                return BadRequest(new { message = "Datos de planificaciÃ³n requeridos." });
+
+            if (string.IsNullOrWhiteSpace(actividadDto.Descripcion))
+                return BadRequest(new { message = "Debe indicar el tema o descripciÃ³n de la actividad." });
+
+            if (actividadDto.FechaPlanificada == default)
+                return BadRequest(new { message = "Debe indicar la fecha y horario de la actividad." });
+
+            var ayudantia = await _context.Ayudantias
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
+
+            if (ayudantia == null)
+                return NotFound(new { message = "AyudantÃ­a no encontrada." });
+
+            var esDocenteResponsable = await _context.Catedras
+                .AsNoTracking()
+                .AnyAsync(c => c.Id == ayudantia.CatedraId && c.DocenteId == docenteId);
+
+            if (!esDocenteResponsable)
+            {
+                return StatusCode(403, new
+                {
+                    message = "Solo el docente responsable de la cÃ¡tedra puede modificar la planificaciÃ³n."
+                });
+            }
+
+            var actividad = await _context.ActividadesAyudantia
+                .FirstOrDefaultAsync(a => a.Id == actividadId && a.AyudantiaId == ayudantiaId);
+
+            if (actividad == null)
+                return NotFound(new { message = "Actividad planificada no encontrada." });
+
+            var fechaPlanificada = actividadDto.FechaPlanificada.Kind == System.DateTimeKind.Unspecified
+                ? System.DateTime.SpecifyKind(actividadDto.FechaPlanificada, System.DateTimeKind.Utc)
+                : actividadDto.FechaPlanificada.ToUniversalTime();
+
+            var ayudantiasDelMismoAyudante = await _context.Ayudantias
+                .AsNoTracking()
+                .Where(a => a.EstudianteId == ayudantia.EstudianteId)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            var existeConflicto = await _context.ActividadesAyudantia
+                .AsNoTracking()
+                .AnyAsync(a =>
+                    a.Id != actividadId &&
+                    ayudantiasDelMismoAyudante.Contains(a.AyudantiaId) &&
+                    a.FechaPlanificada == fechaPlanificada);
+
+            if (existeConflicto)
+            {
+                return Conflict(new
+                {
+                    message = "El ayudante ya tiene una actividad planificada en esa fecha y horario."
+                });
+            }
+
+            actividad.Descripcion = actividadDto.Descripcion.Trim();
+            actividad.FechaPlanificada = fechaPlanificada;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ActividadAyudantiaDto
+            {
+                Id = actividad.Id,
+                AyudantiaId = actividad.AyudantiaId,
+                Descripcion = actividad.Descripcion,
+                FechaPlanificada = actividad.FechaPlanificada,
+                Completada = actividad.Completada
+            });
+        }
+
+
+// =========================================================
+        // RF-010 - MONITOREO DEL CUMPLIMIENTO DE ACTIVIDADES
         // =========================================================
 
+        // GET /api/Docente/ayudantias/{ayudantiaId}/monitoreo
+        // Compara la planificación con las bitácoras registradas y calcula
+        // el estado de cumplimiento sin modificar otros módulos.
         [HttpGet("ayudantias/{ayudantiaId}/monitoreo")]
+        [Authorize(Roles = "Docente")]
         public async Task<IActionResult> MonitorearCumplimientoAyudante(
             int ayudantiaId)
         {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var docenteId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
             var ayudantia = await _context.Ayudantias
                 .Include(a => a.Estudiante)
+                    .ThenInclude(e => e.Persona)
                 .Include(a => a.Planificacion)
                 .Include(a => a.Bitacoras)
-                .FirstOrDefaultAsync(a =>
-                    a.Id == ayudantiaId);
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
 
             if (ayudantia == null)
-                return NotFound(
-                    "AyudantÃ­a no encontrada.");
+                return NotFound(new { message = "Ayudantía no encontrada." });
 
-            var monitoreoDto = new MonitoreoAyudantiaDto
+            var esDocenteResponsable = await _context.Catedras
+                .AsNoTracking()
+                .AnyAsync(c =>
+                    c.Id == ayudantia.CatedraId &&
+                    c.DocenteId == docenteId);
+
+            if (!esDocenteResponsable)
             {
-                AyudantiaId = ayudantia.Id,
+                return StatusCode(403, new
+                {
+                    message = "Solo el docente responsable de la cátedra puede consultar el monitoreo de esta ayudantía."
+                });
+            }
 
-                NombreAyudante =
-                    ayudantia.Estudiante != null &&
-                    ayudantia.Estudiante.Persona != null
-                        ? $"{ayudantia.Estudiante.Persona.Nombre} {ayudantia.Estudiante.Persona.Apellido}"
-                        : ayudantia.Estudiante.Username,
+            var planificacion = ayudantia.Planificacion
+                .OrderBy(p => p.FechaPlanificada)
+                .ToList();
 
-                Planificacion = ayudantia.Planificacion
-                    .Select(p => new ActividadAyudantiaDto
+            var bitacoras = ayudantia.Bitacoras
+                .OrderByDescending(b => b.Fecha)
+                .ToList();
+
+            // El modelo actual de Bitacora no posee ActividadAyudantiaId.
+            // Por eso el cumplimiento se calcula dinámicamente usando:
+            // 1) el estado Completada ya registrado en la planificación, o
+            // 2) una bitácora de la misma ayudantía registrada en la fecha
+            //    correspondiente a la actividad planificada.
+            // Así, al existir una nueva bitácora, el siguiente GET refleja
+            // automáticamente el nuevo estado sin cambiar RF-007.
+            var actividades = planificacion
+                .Select(p =>
+                {
+                    var bitacoraRelacionada = bitacoras
+                        .Where(b => b.Fecha.Date == p.FechaPlanificada.Date)
+                        .OrderBy(b => System.Math.Abs(
+                            (b.Fecha - p.FechaPlanificada).TotalMinutes))
+                        .FirstOrDefault();
+
+                    var cumplida = p.Completada || bitacoraRelacionada != null;
+
+                    return new
                     {
-                        Id = p.Id,
-                        AyudantiaId = p.AyudantiaId,
-                        Descripcion = p.Descripcion,
-                        FechaPlanificada = p.FechaPlanificada,
-                        Completada = p.Completada
+                        id = p.Id,
+                        ayudantiaId = p.AyudantiaId,
+                        descripcion = p.Descripcion,
+                        fechaPlanificada = p.FechaPlanificada,
+                        completada = cumplida,
+                        estadoCumplimiento = cumplida ? "Cumplida" : "Pendiente",
+                        bitacora = bitacoraRelacionada == null
+                            ? null
+                            : new
+                            {
+                                id = bitacoraRelacionada.Id,
+                                fecha = bitacoraRelacionada.Fecha,
+                                actividadesRealizadas = bitacoraRelacionada.ActividadesRealizadas,
+                                evidenciaUrl = bitacoraRelacionada.EvidenciaUrl,
+                                tieneEvidencia = !string.IsNullOrWhiteSpace(bitacoraRelacionada.EvidenciaUrl)
+                            }
+                    };
+                })
+                .ToList();
+
+            var totalActividades = actividades.Count;
+            var actividadesCumplidas = actividades.Count(a => a.completada);
+            var actividadesPendientes = totalActividades - actividadesCumplidas;
+            var porcentajeAvance = totalActividades == 0
+                ? 0
+                : System.Math.Round(
+                    actividadesCumplidas * 100.0 / totalActividades,
+                    2);
+
+            var nombreAyudante = ayudantia.Estudiante != null &&
+                                 ayudantia.Estudiante.Persona != null
+                ? $"{ayudantia.Estudiante.Persona.Nombre} {ayudantia.Estudiante.Persona.Apellido}".Trim()
+                : ayudantia.Estudiante?.Username ?? "Ayudante";
+
+            return Ok(new
+            {
+                ayudantiaId = ayudantia.Id,
+                catedraId = ayudantia.CatedraId,
+                estudianteId = ayudantia.EstudianteId,
+                nombreAyudante,
+                estadoAyudantia = ayudantia.Estado,
+
+                resumen = new
+                {
+                    totalActividades,
+                    actividadesCumplidas,
+                    actividadesPendientes,
+                    porcentajeAvance
+                },
+
+                actividades,
+
+                actividadesPendientes = actividades
+                    .Where(a => !a.completada)
+                    .Select(a => new
+                    {
+                        a.id,
+                        a.descripcion,
+                        a.fechaPlanificada,
+                        a.estadoCumplimiento
                     })
                     .ToList(),
 
-                Bitacoras = ayudantia.Bitacoras
-                    .Select(b => new BitacoraDto
+                bitacoras = bitacoras
+                    .Select(b => new
                     {
-                        Id = b.Id,
-                        Fecha = b.Fecha,
-                        ActividadesRealizadas =
-                            b.ActividadesRealizadas,
-                        EvidenciaUrl =
-                            b.EvidenciaUrl
+                        id = b.Id,
+                        fecha = b.Fecha,
+                        actividadesRealizadas = b.ActividadesRealizadas,
+                        evidenciaUrl = b.EvidenciaUrl,
+                        tieneEvidencia = !string.IsNullOrWhiteSpace(b.EvidenciaUrl)
                     })
                     .ToList()
-            };
+            });
+        }
 
-            return Ok(monitoreoDto);
+        // =========================================================
+        // RF-024 - GESTIÓN DE DISPONIBILIDAD PARA CLASES DE AYUDANTÍA
+        // =========================================================
+
+        // GET /api/Docente/ayudantias/{ayudantiaId}/disponibilidad
+        // Analiza los horarios académicos de estudiantes, docente y ayudante
+        // y devuelve alternativas sin conflictos. No crea ninguna sesión.
+        [HttpGet("ayudantias/{ayudantiaId}/disponibilidad")]
+        public async Task<IActionResult> ObtenerDisponibilidadAyudantia(
+            int ayudantiaId,
+            [FromQuery] int claseId,
+            [FromQuery] int duracionMinutos = 60,
+            [FromQuery] System.DateTime? fechaInicio = null,
+            [FromQuery] System.DateTime? fechaFin = null)
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var userId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
+            if (claseId <= 0)
+                return BadRequest(new { message = "Debe indicar una clase válida." });
+
+            if (duracionMinutos < 30 || duracionMinutos > 240 || duracionMinutos % 30 != 0)
+            {
+                return BadRequest(new
+                {
+                    message = "La duración debe estar entre 30 y 240 minutos, en bloques de 30 minutos."
+                });
+            }
+
+            var ayudantia = await _context.Ayudantias
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
+
+            if (ayudantia == null)
+                return NotFound(new { message = "Ayudantía no encontrada." });
+
+            var catedra = await _context.Catedras
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == ayudantia.CatedraId);
+
+            if (catedra == null)
+                return NotFound(new { message = "Cátedra de la ayudantía no encontrada." });
+
+            var esDocente = catedra.DocenteId == userId;
+            var esAyudante = ayudantia.EstudianteId == userId;
+
+            if (!esDocente && !esAyudante)
+            {
+                return StatusCode(403, new
+                {
+                    message = "Solo el docente responsable o el ayudante asignado pueden consultar la disponibilidad."
+                });
+            }
+
+            var clase = await _context.Clases
+                .Include(c => c.Estudiantes)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == claseId);
+
+            if (clase == null)
+                return NotFound(new { message = "Clase no encontrada." });
+
+            if (!clase.CatedraId.HasValue || clase.CatedraId.Value != ayudantia.CatedraId)
+            {
+                return BadRequest(new
+                {
+                    message = "La clase seleccionada no pertenece a la cátedra de esta ayudantía."
+                });
+            }
+
+            var periodoVigente = await _context.Catedras
+                .AsNoTracking()
+                .Where(c => c.Semestre != null && c.Semestre != "")
+                .OrderByDescending(c => c.Semestre)
+                .Select(c => c.Semestre)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(periodoVigente) &&
+                !string.Equals(catedra.Semestre, periodoVigente, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    message = $"La cátedra pertenece al periodo {catedra.Semestre}, pero el periodo académico vigente es {periodoVigente}."
+                });
+            }
+
+            var desde = fechaInicio?.Date ?? System.DateTime.UtcNow.Date;
+            var hasta = fechaFin?.Date ?? desde.AddDays(6);
+
+            desde = System.DateTime.SpecifyKind(desde, System.DateTimeKind.Utc);
+            hasta = System.DateTime.SpecifyKind(hasta, System.DateTimeKind.Utc);
+
+            if (hasta < desde)
+                return BadRequest(new { message = "La fecha final no puede ser anterior a la fecha inicial." });
+
+            if ((hasta - desde).TotalDays > 31)
+                return BadRequest(new { message = "El rango máximo de consulta es de 31 días." });
+
+            var participanteIds = clase.Estudiantes
+                .Select(e => e.Id)
+                .ToList();
+
+            if (!participanteIds.Contains(ayudantia.EstudianteId))
+                participanteIds.Add(ayudantia.EstudianteId);
+
+            var catedrasPeriodoIds = await _context.Catedras
+                .AsNoTracking()
+                .Where(c => c.Semestre == catedra.Semestre)
+                .Select(c => c.Id)
+                .ToListAsync();
+
+            var clasesRelacionadas = await _context.Clases
+                .Include(c => c.Estudiantes)
+                .AsNoTracking()
+                .Where(c =>
+                    c.CatedraId.HasValue &&
+                    catedrasPeriodoIds.Contains(c.CatedraId.Value) &&
+                    (c.DocenteId == catedra.DocenteId ||
+                     c.Estudiantes.Any(e => participanteIds.Contains(e.Id))))
+                .ToListAsync();
+
+            var clasesRelacionadasIds = clasesRelacionadas
+                .Select(c => c.Id)
+                .Distinct()
+                .ToList();
+
+            var sesiones = await _context.ClasesSesiones
+                .AsNoTracking()
+                .Where(s =>
+                    s.Fecha >= desde &&
+                    s.Fecha < hasta.AddDays(1) &&
+                    (s.DocenteId == catedra.DocenteId ||
+                     (s.ClaseId.HasValue && clasesRelacionadasIds.Contains(s.ClaseId.Value))))
+                .OrderBy(s => s.Fecha)
+                .ThenBy(s => s.HoraInicio)
+                .ToListAsync();
+
+            var ayudantiasDelMismoAyudante = await _context.Ayudantias
+                .AsNoTracking()
+                .Where(a => a.EstudianteId == ayudantia.EstudianteId)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            var actividadesAyudantia = await _context.ActividadesAyudantia
+                .AsNoTracking()
+                .Where(a =>
+                    ayudantiasDelMismoAyudante.Contains(a.AyudantiaId) &&
+                    a.FechaPlanificada >= desde &&
+                    a.FechaPlanificada < hasta.AddDays(1))
+                .OrderBy(a => a.FechaPlanificada)
+                .ToListAsync();
+
+            var horaApertura = new System.TimeSpan(8, 0, 0);
+            var horaCierre = new System.TimeSpan(18, 0, 0);
+            var paso = System.TimeSpan.FromMinutes(30);
+            var duracion = System.TimeSpan.FromMinutes(duracionMinutos);
+
+            var alternativas = new List<object>();
+
+            for (var fecha = desde; fecha <= hasta; fecha = fecha.AddDays(1))
+            {
+                // No se proponen domingos.
+                if (fecha.DayOfWeek == System.DayOfWeek.Sunday)
+                    continue;
+
+                for (var inicio = horaApertura; inicio + duracion <= horaCierre; inicio += paso)
+                {
+                    var fin = inicio + duracion;
+
+                    var conflictoSesion = sesiones.Any(s =>
+                        s.Fecha.Date == fecha.Date &&
+                        inicio < s.HoraFin &&
+                        fin > s.HoraInicio);
+
+                    if (conflictoSesion)
+                        continue;
+
+                    var inicioCandidato = fecha.Add(inicio);
+                    var finCandidato = inicioCandidato.AddMinutes(duracionMinutos);
+
+                    // El modelo actual de ActividadAyudantia no almacena duración.
+                    // Para evitar doble reserva del ayudante se considera cada actividad
+                    // planificada como un bloque de la misma duración solicitada.
+                    var conflictoAyudantia = actividadesAyudantia.Any(a =>
+                    {
+                        var inicioExistente = a.FechaPlanificada;
+                        var finExistente = inicioExistente.AddMinutes(duracionMinutos);
+                        return inicioCandidato < finExistente && finCandidato > inicioExistente;
+                    });
+
+                    if (conflictoAyudantia)
+                        continue;
+
+                    alternativas.Add(new
+                    {
+                        fecha = fecha.ToString("yyyy-MM-dd"),
+                        horaInicio = inicio.ToString(@"hh\:mm"),
+                        horaFin = fin.ToString(@"hh\:mm"),
+                        duracionMinutos
+                    });
+
+                    if (alternativas.Count >= 40)
+                        break;
+                }
+
+                if (alternativas.Count >= 40)
+                    break;
+            }
+
+            var conflictos = sesiones
+                .Select(s =>
+                {
+                    var claseSesion = s.ClaseId.HasValue
+                        ? clasesRelacionadas.FirstOrDefault(c => c.Id == s.ClaseId.Value)
+                        : null;
+
+                    var estudiantesAfectados = claseSesion == null
+                        ? 0
+                        : claseSesion.Estudiantes.Count(e => participanteIds.Contains(e.Id));
+
+                    var razones = new List<string>();
+
+                    if (s.DocenteId == catedra.DocenteId)
+                        razones.Add("Docente ocupado");
+
+                    if (estudiantesAfectados > 0)
+                        razones.Add($"{estudiantesAfectados} participante(s) con clase");
+
+                    return new
+                    {
+                        sesionId = s.Id,
+                        claseId = s.ClaseId,
+                        clase = claseSesion?.Nombre ?? "Sesión académica",
+                        fecha = s.Fecha,
+                        horaInicio = s.HoraInicio.ToString(@"hh\:mm"),
+                        horaFin = s.HoraFin.ToString(@"hh\:mm"),
+                        razones
+                    };
+                })
+                .ToList();
+
+            var conflictosAyudantia = actividadesAyudantia
+                .Select(a => new
+                {
+                    actividadAyudantiaId = a.Id,
+                    fecha = a.FechaPlanificada,
+                    descripcion = a.Descripcion,
+                    razon = "Ayudante con actividad de ayudantía ya planificada"
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                ayudantiaId,
+                clase = new
+                {
+                    id = clase.Id,
+                    nombre = clase.Nombre,
+                    catedraId = clase.CatedraId
+                },
+                periodoAcademico = catedra.Semestre,
+                duracionMinutos,
+                rangoConsultado = new
+                {
+                    fechaInicio = desde.ToString("yyyy-MM-dd"),
+                    fechaFin = hasta.ToString("yyyy-MM-dd"),
+                    horaApertura = "08:00",
+                    horaCierre = "18:00"
+                },
+                participantes = new
+                {
+                    estudiantesClase = clase.Estudiantes.Count,
+                    ayudanteId = ayudantia.EstudianteId,
+                    docenteId = catedra.DocenteId
+                },
+                horariosDisponibles = alternativas,
+                posiblesConflictos = conflictos,
+                conflictosAyudantia,
+                totalAlternativas = alternativas.Count,
+                sesionCreada = false,
+                mensaje = alternativas.Count > 0
+                    ? "Se encontraron alternativas sin conflictos. Seleccione una para continuar."
+                    : "No se encontraron horarios disponibles en el rango consultado."
+            });
+        }
+
+        // POST /api/Docente/ayudantias/{ayudantiaId}/disponibilidad/seleccionar
+        // Valida y selecciona una alternativa. La selección NO crea una ClaseSesion;
+        // la sesión real se confirma posteriormente mediante RF-019.
+        [HttpPost("ayudantias/{ayudantiaId}/disponibilidad/seleccionar")]
+        public async Task<IActionResult> SeleccionarHorarioAyudantia(
+            int ayudantiaId,
+            [FromBody] SeleccionarHorarioAyudantiaRequest request)
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(value, out var userId))
+                return Unauthorized(new { message = "Usuario no autenticado." });
+
+            if (request == null)
+                return BadRequest(new { message = "Datos de horario requeridos." });
+
+            if (request.ClaseId <= 0)
+                return BadRequest(new { message = "Debe indicar una clase válida." });
+
+            if (request.DuracionMinutos < 30 || request.DuracionMinutos > 240 || request.DuracionMinutos % 30 != 0)
+            {
+                return BadRequest(new
+                {
+                    message = "La duración debe estar entre 30 y 240 minutos, en bloques de 30 minutos."
+                });
+            }
+
+            if (request.FechaHoraInicio == default)
+                return BadRequest(new { message = "Debe indicar la fecha y hora seleccionadas." });
+
+            var inicioSeleccionado = request.FechaHoraInicio.Kind == System.DateTimeKind.Unspecified
+                ? System.DateTime.SpecifyKind(request.FechaHoraInicio, System.DateTimeKind.Utc)
+                : request.FechaHoraInicio.ToUniversalTime();
+
+            var finSeleccionado = inicioSeleccionado.AddMinutes(request.DuracionMinutos);
+
+            if (inicioSeleccionado.DayOfWeek == System.DayOfWeek.Sunday)
+                return BadRequest(new { message = "No se permiten horarios de ayudantía en domingo." });
+
+            if (inicioSeleccionado.TimeOfDay < new System.TimeSpan(8, 0, 0) ||
+                finSeleccionado.TimeOfDay > new System.TimeSpan(18, 0, 0))
+            {
+                return BadRequest(new
+                {
+                    message = "El horario seleccionado debe estar entre las 08:00 y las 18:00."
+                });
+            }
+
+            var ayudantia = await _context.Ayudantias
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == ayudantiaId);
+
+            if (ayudantia == null)
+                return NotFound(new { message = "Ayudantía no encontrada." });
+
+            var catedra = await _context.Catedras
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == ayudantia.CatedraId);
+
+            if (catedra == null)
+                return NotFound(new { message = "Cátedra de la ayudantía no encontrada." });
+
+            var esDocente = catedra.DocenteId == userId;
+            var esAyudante = ayudantia.EstudianteId == userId;
+
+            if (!esDocente && !esAyudante)
+            {
+                return StatusCode(403, new
+                {
+                    message = "Solo el docente responsable o el ayudante asignado pueden seleccionar el horario."
+                });
+            }
+
+            var clase = await _context.Clases
+                .Include(c => c.Estudiantes)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == request.ClaseId);
+
+            if (clase == null)
+                return NotFound(new { message = "Clase no encontrada." });
+
+            if (!clase.CatedraId.HasValue || clase.CatedraId.Value != ayudantia.CatedraId)
+            {
+                return BadRequest(new
+                {
+                    message = "La clase seleccionada no pertenece a la cátedra de esta ayudantía."
+                });
+            }
+
+            var periodoVigente = await _context.Catedras
+                .AsNoTracking()
+                .Where(c => c.Semestre != null && c.Semestre != "")
+                .OrderByDescending(c => c.Semestre)
+                .Select(c => c.Semestre)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(periodoVigente) &&
+                !string.Equals(catedra.Semestre, periodoVigente, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    message = $"La cátedra pertenece al periodo {catedra.Semestre}, pero el periodo académico vigente es {periodoVigente}."
+                });
+            }
+
+            var participanteIds = clase.Estudiantes.Select(e => e.Id).ToList();
+            if (!participanteIds.Contains(ayudantia.EstudianteId))
+                participanteIds.Add(ayudantia.EstudianteId);
+
+            var catedrasPeriodoIds = await _context.Catedras
+                .AsNoTracking()
+                .Where(c => c.Semestre == catedra.Semestre)
+                .Select(c => c.Id)
+                .ToListAsync();
+
+            var clasesRelacionadasIds = await _context.Clases
+                .AsNoTracking()
+                .Where(c =>
+                    c.CatedraId.HasValue &&
+                    catedrasPeriodoIds.Contains(c.CatedraId.Value) &&
+                    (c.DocenteId == catedra.DocenteId ||
+                     c.Estudiantes.Any(e => participanteIds.Contains(e.Id))))
+                .Select(c => c.Id)
+                .Distinct()
+                .ToListAsync();
+
+            var fechaDia = System.DateTime.SpecifyKind(inicioSeleccionado.Date, System.DateTimeKind.Utc);
+
+            var conflictoSesion = await _context.ClasesSesiones
+                .AsNoTracking()
+                .AnyAsync(s =>
+                    s.Fecha >= fechaDia &&
+                    s.Fecha < fechaDia.AddDays(1) &&
+                    (s.DocenteId == catedra.DocenteId ||
+                     (s.ClaseId.HasValue && clasesRelacionadasIds.Contains(s.ClaseId.Value))) &&
+                    inicioSeleccionado.TimeOfDay < s.HoraFin &&
+                    finSeleccionado.TimeOfDay > s.HoraInicio);
+
+            if (conflictoSesion)
+            {
+                return Conflict(new
+                {
+                    message = "El horario seleccionado presenta conflicto con una clase registrada."
+                });
+            }
+
+            var ayudantiasDelMismoAyudante = await _context.Ayudantias
+                .AsNoTracking()
+                .Where(a => a.EstudianteId == ayudantia.EstudianteId)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            var actividadesMismoDia = await _context.ActividadesAyudantia
+                .AsNoTracking()
+                .Where(a =>
+                    ayudantiasDelMismoAyudante.Contains(a.AyudantiaId) &&
+                    a.FechaPlanificada >= fechaDia &&
+                    a.FechaPlanificada < fechaDia.AddDays(1))
+                .ToListAsync();
+
+            var conflictoAyudantia = actividadesMismoDia.Any(a =>
+            {
+                var inicioExistente = a.FechaPlanificada;
+                var finExistente = inicioExistente.AddMinutes(request.DuracionMinutos);
+                return inicioSeleccionado < finExistente && finSeleccionado > inicioExistente;
+            });
+
+            if (conflictoAyudantia)
+            {
+                return Conflict(new
+                {
+                    message = "El ayudante ya tiene una actividad planificada que se cruza con el horario seleccionado."
+                });
+            }
+
+            return Ok(new
+            {
+                ayudantiaId,
+                claseId = clase.Id,
+                clase = clase.Nombre,
+                periodoAcademico = catedra.Semestre,
+                horarioSeleccionado = new
+                {
+                    fecha = inicioSeleccionado.ToString("yyyy-MM-dd"),
+                    horaInicio = inicioSeleccionado.ToString("HH:mm"),
+                    horaFin = finSeleccionado.ToString("HH:mm"),
+                    duracionMinutos = request.DuracionMinutos
+                },
+                estado = "SeleccionadoPendienteConfirmacion",
+                sesionCreada = false,
+                claseSesionId = (int?)null,
+                mensaje = "Horario seleccionado y validado. No se creó ninguna sesión; debe confirmarse posteriormente."
+            });
+        }
+
+        public class SeleccionarHorarioAyudantiaRequest
+        {
+            public int ClaseId { get; set; }
+            public System.DateTime FechaHoraInicio { get; set; }
+            public int DuracionMinutos { get; set; } = 60;
         }
 
         // =========================================================
