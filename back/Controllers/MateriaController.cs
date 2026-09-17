@@ -138,35 +138,42 @@ namespace back.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            var result = materias.Select(m => new
+            var result = materias.Select(m =>
             {
-                id = m.Id,
-                nombre = m.Nombre,
-                codigo = m.Codigo,
-                descripcion = m.Descripcion,
-                claseId = m.ClaseId,
-                claseNombre = m.Clase != null ? m.Clase.Nombre : null,
-                docenteId = m.DocenteResponsableId,
-                docenteResponsableId = m.DocenteResponsableId,
-                nombreDocenteResponsable = m.DocenteResponsable?.Persona != null
-                    ? $"{m.DocenteResponsable.Persona.Nombre} {m.DocenteResponsable.Persona.Apellido}".Trim()
-                    : (m.DocenteResponsable != null ? m.DocenteResponsable.Username : "Docente"),
-                docente = m.DocenteResponsable != null && m.DocenteResponsable.Persona != null ? new
+                var catedraRelacionada = catedras.FirstOrDefault(c =>
+                    string.Equals(c.Nombre?.Trim(), m.Nombre?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                return new
                 {
-                    id = m.DocenteResponsable.Id,
-                    username = m.DocenteResponsable.Username,
-                    nombre = $"{m.DocenteResponsable.Persona.Nombre} {m.DocenteResponsable.Persona.Apellido}".Trim(),
-                    correo = m.DocenteResponsable.Persona.Correo,
-                    cedula = m.DocenteResponsable.Persona.Cedula
-                } : null,
-                clases = (m.Clases ?? new List<Clase>()).Select(c => new
-                {
-                    id = c.Id,
-                    claseId = c.Id,
-                    nombre = c.Nombre,
-                    materiaId = c.MateriaId,
-                    docenteId = c.DocenteId
-                }).ToList()
+                    id = m.Id,
+                    catedraId = catedraRelacionada?.Id,
+                    nombre = m.Nombre,
+                    codigo = m.Codigo,
+                    descripcion = m.Descripcion,
+                    claseId = m.ClaseId,
+                    claseNombre = m.Clase != null ? m.Clase.Nombre : null,
+                    docenteId = m.DocenteResponsableId,
+                    docenteResponsableId = m.DocenteResponsableId,
+                    nombreDocenteResponsable = m.DocenteResponsable?.Persona != null
+                        ? $"{m.DocenteResponsable.Persona.Nombre} {m.DocenteResponsable.Persona.Apellido}".Trim()
+                        : (m.DocenteResponsable != null ? m.DocenteResponsable.Username : "Docente"),
+                    docente = m.DocenteResponsable != null && m.DocenteResponsable.Persona != null ? new
+                    {
+                        id = m.DocenteResponsable.Id,
+                        username = m.DocenteResponsable.Username,
+                        nombre = $"{m.DocenteResponsable.Persona.Nombre} {m.DocenteResponsable.Persona.Apellido}".Trim(),
+                        correo = m.DocenteResponsable.Persona.Correo,
+                        cedula = m.DocenteResponsable.Persona.Cedula
+                    } : null,
+                    clases = (m.Clases ?? new List<Clase>()).Select(c => new
+                    {
+                        id = c.Id,
+                        claseId = c.Id,
+                        nombre = c.Nombre,
+                        materiaId = c.MateriaId,
+                        docenteId = c.DocenteId
+                    }).ToList()
+                };
             }).ToList();
 
             return Ok(result);
@@ -211,9 +218,14 @@ namespace back.Controllers
                 }
             }
 
+            var catedraRelacionada = await _context.Catedras
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Nombre.ToLower() == materia.Nombre.ToLower());
+
             var result = new
             {
                 id = materia.Id,
+                catedraId = catedraRelacionada != null ? (int?)catedraRelacionada.Id : null,
                 nombre = materia.Nombre,
                 codigo = materia.Codigo,
                 descripcion = materia.Descripcion,
@@ -587,8 +599,6 @@ namespace back.Controllers
                                 })
                                 .ToListAsync();
 
-            if (!recursos.Any()) return NotFound(new { message = "No se encontraron recursos para esta materia." });
-
             return Ok(recursos);
         }
 
@@ -697,8 +707,6 @@ namespace back.Controllers
                                     MateriaId = a.MateriaId
                                 }).ToListAsync();
 
-            if (!actividades.Any()) return NotFound(new { message = "No se encontraron actividades para esta materia." });
-
             return Ok(actividades);
         }
 
@@ -770,9 +778,8 @@ namespace back.Controllers
                                                     .Any(rv => rv.RecursoId == r.Id && rv.EstudianteId == UserId.Value)
                                 }).ToListAsync();
 
-            if (!recursos.Any()) return NotFound(new { message = "No se encontraron recursos para esta materia." });
-
             return Ok(recursos);
         }
     }
 }
+
