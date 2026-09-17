@@ -491,14 +491,22 @@ namespace back.Controllers
             return Ok(new { success = true, message = "Materia eliminada exitosamente." });
         }
 
-        // Helper para verificar si el usuario es docente de la materia
+        // Helper para verificar si el usuario autenticado es el docente responsable
+        // de la MATERIA real recibida por las rutas /api/Materia/{materiaId}/...
         private async Task<bool> IsDocenteOfMateria(int materiaId)
         {
             if (UserId == null) return false;
 
-            var materia = await _context.Catedras.AsNoTracking()
-                                .FirstOrDefaultAsync(m => m.Id == materiaId && m.DocenteId == UserId.Value);
-            return materia != null;
+            return await _context.Materias
+                .AsNoTracking()
+                .AnyAsync(m => m.Id == materiaId && m.DocenteResponsableId == UserId.Value);
+        }
+
+        // ASP.NET interpreta Forbid("texto") como nombre de un esquema de autenticación.
+        // Para devolver un 403 con mensaje usamos una respuesta explícita.
+        private ObjectResult ForbiddenWithMessage(string message)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message });
         }
 
         // Endpoint para añadir un recurso a una materia (solo docentes)
@@ -506,9 +514,9 @@ namespace back.Controllers
         public async Task<IActionResult> AddRecurso(int materiaId, [FromBody] CreateRecursoDto createRecursoDto)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede añadir recursos a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return ForbiddenWithMessage("Solo el docente responsable puede añadir recursos a esta materia.");
 
-            var materia = await _context.Catedras.FindAsync(materiaId);
+            var materia = await _context.Materias.FindAsync(materiaId);
             if (materia == null) return NotFound(new { message = "Materia no encontrada." });
 
             var recurso = new Recurso
@@ -538,12 +546,57 @@ namespace back.Controllers
             return CreatedAtAction(nameof(GetRecursosByMateria), new { materiaId = materiaId }, recursoDto);
         }
 
+        // PUT /api/Materia/{materiaId}/recursos/{recursoId}
+        // Actualiza un recurso existente de la materia (solo docente responsable)
+        [HttpPut("{materiaId}/recursos/{recursoId}")]
+        public async Task<IActionResult> UpdateRecurso(
+            int materiaId,
+            int recursoId,
+            [FromBody] CreateRecursoDto updateRecursoDto)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfMateria(materiaId))
+                return ForbiddenWithMessage("Solo el docente responsable puede actualizar recursos de esta materia.");
+
+            var recurso = await _context.Recursos
+                .FirstOrDefaultAsync(r => r.Id == recursoId && r.MateriaId == materiaId);
+
+            if (recurso == null)
+                return NotFound(new { message = "Recurso no encontrado para la materia indicada." });
+
+            if (string.IsNullOrWhiteSpace(updateRecursoDto.Titulo))
+                return BadRequest(new { message = "El título del recurso es obligatorio." });
+
+            recurso.Titulo = updateRecursoDto.Titulo.Trim();
+            recurso.Descripcion = updateRecursoDto.Descripcion?.Trim() ?? string.Empty;
+            recurso.Url = updateRecursoDto.Url?.Trim() ?? string.Empty;
+            recurso.EsEsencial = updateRecursoDto.EsEsencial;
+
+            // Links actualmente es [NotMapped] en Recurso. Se conserva en la
+            // respuesta de esta operación, pero su persistencia definitiva se
+            // resolverá en el siguiente ajuste de la entidad/base de datos.
+            recurso.Links = updateRecursoDto.Links ?? new List<string>();
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new RecursoDto
+            {
+                Id = recurso.Id,
+                Titulo = recurso.Titulo,
+                Descripcion = recurso.Descripcion,
+                Url = recurso.Url,
+                EsEsencial = recurso.EsEsencial,
+                MateriaId = recurso.MateriaId,
+                Links = recurso.Links ?? new List<string>()
+            });
+        }
+
         // Upload file to Supabase Storage and return public URL (does not create recurso record)
         [HttpPost("{materiaId}/recursos/upload")]
         public async Task<IActionResult> UploadRecursoFile(int materiaId, IFormFile archivo)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede subir archivos a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return ForbiddenWithMessage("Solo el docente responsable puede subir archivos a esta materia.");
 
             if (archivo == null || archivo.Length == 0) return BadRequest(new { message = "Archivo requerido." });
 
@@ -631,7 +684,7 @@ namespace back.Controllers
             if (UserId == null) return Unauthorized();
 
             // Solo el docente responsable puede añadir temas
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede añadir temas a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return ForbiddenWithMessage("Solo el docente responsable puede añadir temas a esta materia.");
 
             var materia = await _context.Catedras.FindAsync(materiaId);
             if (materia == null) return NotFound(new { message = "Materia no encontrada." });
@@ -653,21 +706,35 @@ namespace back.Controllers
             return CreatedAtAction(nameof(GetTemasByMateria), new { materiaId = materiaId }, temaDto);
         }
 
+        // Normaliza fechas recibidas desde inputs datetime-local.
+        // Evita errores de EF/Npgsql cuando la BD utiliza timestamp with time zone.
+        private static DateTime NormalizarFechaUtc(DateTime fecha)
+        {
+            if (fecha.Kind == DateTimeKind.Utc) return fecha;
+
+            if (fecha.Kind == DateTimeKind.Local)
+                return fecha.ToUniversalTime();
+
+            // datetime-local llega como Unspecified. Para el sistema académico
+            // se conserva el valor indicado por el usuario y se marca como UTC.
+            return DateTime.SpecifyKind(fecha, DateTimeKind.Utc);
+        }
+
         // Endpoint para añadir una actividad a una materia (solo docentes)
         [HttpPost("{materiaId}/actividades")]
         public async Task<IActionResult> AddActividad(int materiaId, [FromBody] CreateActividadDto createActividadDto)
         {
             if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfMateria(materiaId)) return Forbid("Solo el docente responsable puede añadir actividades a esta materia.");
+            if (!await IsDocenteOfMateria(materiaId)) return ForbiddenWithMessage("Solo el docente responsable puede añadir actividades a esta materia.");
 
-            var materia = await _context.Catedras.FindAsync(materiaId);
+            var materia = await _context.Materias.FindAsync(materiaId);
             if (materia == null) return NotFound(new { message = "Materia no encontrada." });
 
             var actividad = new Actividad
             {
                 Titulo = createActividadDto.Titulo,
                 Descripcion = createActividadDto.Descripcion,
-                FechaEntrega = createActividadDto.FechaEntrega,
+                FechaEntrega = NormalizarFechaUtc(createActividadDto.FechaEntrega),
                 Tipo = createActividadDto.Tipo,
                 Estado = "Pendiente", // Estado inicial por defecto
                 MateriaId = materiaId
@@ -677,6 +744,46 @@ namespace back.Controllers
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetActividadesByMateria), new { materiaId = materiaId }, new ActividadDto
+            {
+                Id = actividad.Id,
+                Titulo = actividad.Titulo,
+                Descripcion = actividad.Descripcion,
+                FechaEntrega = actividad.FechaEntrega,
+                Tipo = actividad.Tipo,
+                Estado = actividad.Estado,
+                MateriaId = actividad.MateriaId
+            });
+        }
+
+        // PUT /api/Materia/{materiaId}/actividades/{actividadId}
+        // Actualiza una actividad existente de la materia (solo docente responsable)
+        [HttpPut("{materiaId}/actividades/{actividadId}")]
+        public async Task<IActionResult> UpdateActividad(
+            int materiaId,
+            int actividadId,
+            [FromBody] CreateActividadDto updateActividadDto)
+        {
+            if (UserId == null) return Unauthorized();
+            if (!await IsDocenteOfMateria(materiaId))
+                return ForbiddenWithMessage("Solo el docente responsable puede actualizar actividades de esta materia.");
+
+            var actividad = await _context.Actividades
+                .FirstOrDefaultAsync(a => a.Id == actividadId && a.MateriaId == materiaId);
+
+            if (actividad == null)
+                return NotFound(new { message = "Actividad no encontrada para la materia indicada." });
+
+            if (string.IsNullOrWhiteSpace(updateActividadDto.Titulo))
+                return BadRequest(new { message = "El título de la actividad es obligatorio." });
+
+            actividad.Titulo = updateActividadDto.Titulo.Trim();
+            actividad.Descripcion = updateActividadDto.Descripcion?.Trim() ?? string.Empty;
+            actividad.FechaEntrega = NormalizarFechaUtc(updateActividadDto.FechaEntrega);
+            actividad.Tipo = updateActividadDto.Tipo;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ActividadDto
             {
                 Id = actividad.Id,
                 Titulo = actividad.Titulo,
@@ -725,7 +832,7 @@ namespace back.Controllers
                                         .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == recurso.MateriaId);
             if (!isStudentInMateria)
             {
-                return Forbid("No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia.");
+                return ForbiddenWithMessage("No tienes permiso para marcar este recurso como visto, ya que no estás inscrito en la materia.");
             }
 
             // Verificar si ya está marcado como visto
@@ -761,7 +868,7 @@ namespace back.Controllers
                                         .AnyAsync(i => i.EstudianteId == UserId.Value && i.CatedraId == materiaId);
             if (!isStudentInMateria)
             {
-                return Forbid("No tienes permiso para ver el estado de los recursos de esta materia.");
+                return ForbiddenWithMessage("No tienes permiso para ver el estado de los recursos de esta materia.");
             }
 
             var recursos = await _context.Recursos
