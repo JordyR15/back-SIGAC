@@ -68,7 +68,6 @@ namespace back.Controllers
                         .ThenInclude(e => e.Persona)
                 .Include(p => p.Jurados)
                     .ThenInclude(j => j.Persona)
-
                 .Select(p => new
                 {
                     p.Id,
@@ -80,39 +79,9 @@ namespace back.Controllers
                         .Select(j => j.Persona.Nombre + " " + j.Persona.Apellido)
                         .ToList()
                 })
-                 .ToListAsync();
+                .ToListAsync();
 
-            var result = presentaciones.Select(p =>
-            {
-                var juradoNombres = p.Jurados.Select(j => j.Persona != null ? $"{j.Persona.Nombre} {j.Persona.Apellido}".Trim() : j.Username).ToList();
-                var estadoActual = p.Ayudantia != null && !string.IsNullOrEmpty(p.Ayudantia.Estado) ? p.Ayudantia.Estado : "Convocada";
-
-                return new
-                {
-                    p.Id,
-                    id = p.Id,
-                    presentacionId = p.Id,
-                    p.AyudantiaId,
-                    ayudantiaId = p.AyudantiaId,
-                    p.Fecha,
-                    fecha = p.Fecha,
-                    fechaPresentacion = p.Fecha,
-                    Catedra = p.Ayudantia?.Catedra?.Nombre ?? "Cátedra General",
-                    catedra = p.Ayudantia?.Catedra?.Nombre ?? "Cátedra General",
-                    catedraNombre = p.Ayudantia?.Catedra?.Nombre ?? "Cátedra General",
-                    Postulante = p.Ayudantia?.Estudiante?.Persona != null ? $"{p.Ayudantia.Estudiante.Persona.Nombre} {p.Ayudantia.Estudiante.Persona.Apellido}".Trim() : (p.Ayudantia?.Estudiante?.Username ?? "Estudiante"),
-                    estudianteNombre = p.Ayudantia?.Estudiante?.Persona != null ? $"{p.Ayudantia.Estudiante.Persona.Nombre} {p.Ayudantia.Estudiante.Persona.Apellido}".Trim() : (p.Ayudantia?.Estudiante?.Username ?? "Estudiante"),
-                    Jurados = juradoNombres,
-                    jurados = juradoNombres,
-                    profesoresAsignados = juradoNombres,
-                    estado = estadoActual,
-                    reunionPlanificada = true,
-                    estadoTribunal = "Tribunal Convocado - Reunión Planificada",
-                    mensajeTribunal = $"Tribunal convocado y reunión planificada para el {p.Fecha:dd/MM/yyyy HH:mm}. Jurados: {string.Join(", ", juradoNombres)}"
-                };
-            });
-
-            return Ok(result);
+            return Ok(presentaciones);
         }
 
         // GET /api/estudiantes/imports/{jobId}/result
@@ -138,11 +107,10 @@ namespace back.Controllers
 
             if (!esAdministrador && job.CreatedByUserId != callerId.Value)
             {
-                  return StatusCode(403, new { message = "No autorizado para descargar este resultado." });
-                 return StatusCode(
+                return StatusCode(
                     StatusCodes.Status403Forbidden,
                     new { message = "No autorizado para descargar este resultado." });
-             }
+            }
 
             if (string.IsNullOrWhiteSpace(job.ResultFileName))
                 return NotFound(new { message = "No hay archivo de resultado disponible." });
@@ -159,10 +127,9 @@ namespace back.Controllers
             return File(bytes, "text/csv", Path.GetFileName(path));
         }
 
-         // POST /api/estudiantes/bulk-upload (multipart/form-data file)
-         // POST /api/estudiantes/bulk-upload?claseId=39
+        // POST /api/estudiantes/bulk-upload?claseId=39
         // multipart/form-data: file
-         [HttpPost("bulk-upload")]
+        [HttpPost("bulk-upload")]
         public async Task<ActionResult<BulkUploadResultDto>> BulkUpload(
             IFormFile file,
             [FromQuery] long? claseId = null)
@@ -184,11 +151,10 @@ namespace back.Controllers
 
             if (!esAdministrador && !esDocente)
             {
-                 return StatusCode(403, new { message = "No autorizado para subir estudiantes en bloque." });
-                 return StatusCode(
+                return StatusCode(
                     StatusCodes.Status403Forbidden,
                     new { message = "No autorizado para incorporar estudiantes en bloque." });
-             }
+            }
 
             if (file == null || file.Length == 0)
                 return BadRequest(new { message = "Archivo requerido." });
@@ -310,9 +276,8 @@ namespace back.Controllers
                         using var workbook = new XLWorkbook(stream);
                         var ws = workbook.Worksheets.FirstOrDefault();
 
-                         for (int r = firstRowUsed + 1; r <= lastRow; r++)
-                         if (ws == null || ws.FirstRowUsed() == null)
-                         {
+                        if (ws == null || ws.FirstRowUsed() == null)
+                        {
                             estructuraError = "El archivo XLSX está vacío.";
                         }
                         else
@@ -357,9 +322,6 @@ namespace back.Controllers
                     }
                 }
 
-
-                var maxRows = int.TryParse(_config["BulkUpload:MaxRows"], out var m) ? m : 500;
-
                 if (!string.IsNullOrWhiteSpace(estructuraError))
                     return BadRequest(new { message = estructuraError });
 
@@ -370,22 +332,13 @@ namespace back.Controllers
                 if (rows.Count == 0)
                     return BadRequest(new { message = "El archivo no contiene estudiantes para importar." });
 
-                 if (rows.Count > maxRows)
+                if (rows.Count > maxRows)
                 {
                     return BadRequest(new
                     {
                         message = $"El archivo contiene {rows.Count} filas, el máximo permitido es {maxRows}."
                     });
                 }
-
-
-                var allowedDomainsConfig = _config["BulkUpload:AllowedEmailDomains"] ?? string.Empty;
-                var allowedDomains = allowedDomainsConfig.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(d => d.Trim().ToLowerInvariant()).ToArray();
-
-                var callerIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                int.TryParse(callerIdStr, out var callerUserId);
-
-                var job = new Entities.ImportJob
 
                 var allowedDomainsConfig = _config["BulkUpload:AllowedEmailDomains"];
                 var allowedDomains = string.IsNullOrWhiteSpace(allowedDomainsConfig)
@@ -398,7 +351,7 @@ namespace back.Controllers
                         .ToArray();
 
                 var job = new ImportJob
-                 {
+                {
                     CreatedAt = DateTime.UtcNow,
                     CreatedByUserId = callerId.Value,
                     FileName = file.FileName,
@@ -438,10 +391,6 @@ namespace back.Controllers
 
                     try
                     {
-
-                        var cedulaNormalized = new string(row.Cedula.Where(char.IsDigit).ToArray());
-                        if (string.IsNullOrWhiteSpace(cedulaNormalized) || cedulaNormalized.Length < 6)
-
                         var validationError = ValidarFila(
                             row.Nombres,
                             row.Apellidos,
@@ -450,15 +399,14 @@ namespace back.Controllers
                             allowedDomains);
 
                         if (!string.IsNullOrWhiteSpace(validationError))
-                         {
+                        {
                             await RegistrarErrorAsync(job, entry, validationError);
                             continue;
                         }
 
-                         if (string.IsNullOrWhiteSpace(row.Correo))
-                         if (!vistosCedula.Add(cedulaNormalizada) ||
+                        if (!vistosCedula.Add(cedulaNormalizada) ||
                             !vistosCorreo.Add(correoNormalizado))
-                         {
+                        {
                             await RegistrarErrorAsync(
                                 job,
                                 entry,
@@ -466,8 +414,7 @@ namespace back.Controllers
                             continue;
                         }
 
-                         try
-                         User? estudiante = null;
+                        User? estudiante = null;
 
                         var existingPersona = await _context.Personas
                             .Include(p => p.User)
@@ -476,7 +423,7 @@ namespace back.Controllers
                                 p.Correo.ToLower() == correoNormalizado);
 
                         if (existingPersona?.User != null)
-                         {
+                        {
                             estudiante = existingPersona.User;
                             estudiante.Persona = existingPersona;
                         }
@@ -504,11 +451,7 @@ namespace back.Controllers
                             }
                         }
 
-                         User? estudiante = null;
-                        var existingPersona = await _context.Personas
-                            .Include(p => p.User)
-                            .FirstOrDefaultAsync(p => p.Cedula == cedulaNormalized || p.Correo.ToLower() == row.Correo.ToLower());
-                         if (estudiante != null)
+                        if (estudiante != null)
                         {
                             var yaInscrito = await _context.Inscripciones.AnyAsync(i =>
                                     i.EstudianteId == estudiante.Id &&
@@ -533,8 +476,7 @@ namespace back.Controllers
                         {
                             estudianteEsNuevo = true;
 
-                             var tempPassword = $"Uteq.{RandomNumberGenerator.GetInt32(100000, 999999)}!";
-                             var usernameBase = !string.IsNullOrWhiteSpace(row.Username)
+                            var usernameBase = !string.IsNullOrWhiteSpace(row.Username)
                                 ? row.Username!.Trim().ToLowerInvariant()
                                 : correoNormalizado.Split('@')[0].ToLowerInvariant();
 
@@ -556,9 +498,8 @@ namespace back.Controllers
                                 Correo = correoNormalizado
                             };
 
-                             _context.Users.Add(user);
-                             _context.Users.Add(estudiante);
-                             await _context.SaveChangesAsync();
+                            _context.Users.Add(estudiante);
+                            await _context.SaveChangesAsync();
 
                             var persona = new Persona
                             {
@@ -575,25 +516,8 @@ namespace back.Controllers
                             estudiante.Persona = persona;
                             await _context.SaveChangesAsync();
 
-                             estudiante = user;
-
-                            try
-                            {
-                                await _emailService.SendCredentialsAsync(
-                                    row.Correo,
-                                    $"{row.Nombres} {row.Apellidos}".Trim(),
-                                    initialUsername,
-                                    tempPassword,
-                                    "Estudiante"
-                                );
-                                emailSent = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Error al enviar correo a {Correo}", row.Correo);
-                            }
-                             entry.Username = estudiante.Username;
-                         }
+                            entry.Username = estudiante.Username;
+                        }
                         else
                         {
                             entry.Username = estudiante.Username;
@@ -620,10 +544,8 @@ namespace back.Controllers
                             }
                         }
 
-
-                        if (targetClaseId.HasValue && targetClaseId.Value > 0)
-                         var inscripcion = new Inscripcion
-                         {
+                        var inscripcion = new Inscripcion
+                        {
                             EstudianteId = estudiante.Id,
                             ClaseId = targetClase.Id,
                             CatedraId = targetClase.CatedraId.Value,
@@ -871,16 +793,6 @@ namespace back.Controllers
 
         private static string GenerateUsername(string nombres, string apellidos)
         {
-             var nombreParts = nombres.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var apellidoParts = apellidos.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var firstInitial = nombreParts.Length > 0 && !string.IsNullOrEmpty(nombreParts[0]) ? nombreParts[0][0].ToString() : "x";
-            var firstApellido = apellidoParts.Length > 0 ? apellidoParts[0] : "apellido";
-            var secondApellidoInitial = apellidoParts.Length > 1 ? apellidoParts[1][0].ToString() : string.Empty;
-
-            var raw = (firstInitial + firstApellido + secondApellidoInitial).ToLowerInvariant();
-            var cleaned = new string(raw.Where(c => char.IsLetterOrDigit(c)).ToArray());
-            return cleaned;
-
             var nombreParts = nombres.Split(
                 ' ',
                 StringSplitOptions.RemoveEmptyEntries);
@@ -909,7 +821,6 @@ namespace back.Controllers
                 .ToLowerInvariant();
 
             return new string(raw.Where(char.IsLetterOrDigit).ToArray());
-
         }
 
         private async Task<string> MakeUniqueUsernameAsync(string baseUsername)

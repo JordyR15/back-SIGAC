@@ -154,11 +154,6 @@ namespace back.Controllers
         public async Task<IActionResult> CreateClaseSesion(
             [FromBody] CreateClaseSesionDto createClaseSesionDto)
         {
-
-            if (UserId == null) return Unauthorized();
-            if (!await IsDocenteOfClaseSesionContext(createClaseSesionDto.MateriaId, createClaseSesionDto.ClaseId))
-            {
-
             if (UserId == null)
                 return Unauthorized(new { message = "Usuario no autenticado." });
 
@@ -389,10 +384,6 @@ namespace back.Controllers
 
             if (!isDocente && !isStudent)
             {
-
-                // Por:
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tienes permiso para ver esta sesión de clase." });
-
                 return StatusCode(
                     StatusCodes.Status403Forbidden,
                     new
@@ -452,8 +443,7 @@ namespace back.Controllers
                     authorizedSesiones.Add(ToDto(sesion));
             }
 
-
-             if (!authorizedSesiones.Any())
+            if (!authorizedSesiones.Any())
             {
                 return StatusCode(
                     StatusCodes.Status403Forbidden,
@@ -551,10 +541,6 @@ namespace back.Controllers
 
             if (claseSesion.DocenteId != UserId.Value)
             {
-
-                // Por:
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo el docente de esta sesión puede registrar asistencia." });
-
                 return StatusCode(
                     StatusCodes.Status403Forbidden,
                     new
@@ -809,10 +795,6 @@ namespace back.Controllers
 
             if (claseSesion.DocenteId != UserId.Value)
             {
-
-
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo el docente de esta sesión puede ver la asistencia." });
-
                 return StatusCode(
                     StatusCodes.Status403Forbidden,
                     new
